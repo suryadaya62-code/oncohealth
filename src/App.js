@@ -37,26 +37,75 @@ const testimonials = [
   },
 ];
 
+// Doctor schedule with available time slots
+const doctorSchedule = {
+  'Dr. Devmalya Banerjee': {
+    availability: 'Monday to Friday',
+    timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+  },
+  'Dr. Pritam Ray': {
+    availability: 'Tuesday to Friday',
+    timeSlots: ['10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'],
+  },
+  'Dr. Shaoni Parai': {
+    availability: 'Monday, Wednesday, Friday',
+    timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '02:00 PM', '03:00 PM'],
+  },
+};
+
 function App() {
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
   const [page, setPage] = useState('home');
-  const [form, setForm] = useState({ name: '', email: '', date: '', notes: '' });
+  const [form, setForm] = useState({ 
+    name: '', 
+    email: '', 
+    phone: '', 
+    doctor: '', 
+    date: '', 
+    time: '',
+    notes: '' 
+  });
   const [appointments, setAppointments] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const appointmentRef = useRef(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.email || !form.date) {
+    if (!form.name || !form.email || !form.phone || !form.doctor || !form.date || !form.time) {
       setError('Please fill in all required fields.');
       setSubmitted(false);
       return;
     }
-    setError('');
-    setAppointments([...appointments, form]);
-    setSubmitted(true);
-    setForm({ name: '', email: '', date: '', notes: '' });
-    setTimeout(() => setSubmitted(false), 4000);
+    
+    try {
+      setError('');
+      
+      // Send to backend to trigger notifications
+      const response = await fetch(`${BACKEND_URL}/api/appointments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(form),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to book appointment');
+      }
+
+      // Add to local list
+      setAppointments([...appointments, form]);
+      setSubmitted(true);
+      setForm({ name: '', email: '', phone: '', doctor: '', date: '', time: '', notes: '' });
+      
+      setTimeout(() => setSubmitted(false), 4000);
+    } catch (err) {
+      setError(err.message || 'Error booking appointment. Please try again.');
+      console.error('Appointment booking error:', err);
+    }
   };
 
   const scrollToAppt = () => {
@@ -214,10 +263,46 @@ function App() {
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
                 <input
+                  type="tel"
+                  placeholder="Phone number (for WhatsApp & Email notifications)"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+                <select
+                  value={form.doctor}
+                  onChange={(e) => setForm({ ...form, doctor: e.target.value, time: '' })}
+                  className="form-select"
+                  required
+                >
+                  <option value="">Select a doctor</option>
+                  {Object.keys(doctorSchedule).map((docName) => (
+                    <option key={docName} value={docName}>
+                      {docName}
+                    </option>
+                  ))}
+                </select>
+                <input
                   type="date"
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                 />
+                {form.doctor && (
+                  <div className="time-slots">
+                    <p className="time-label">Available times for {form.doctor}:</p>
+                    <div className="time-grid">
+                      {doctorSchedule[form.doctor].timeSlots.map((slot) => (
+                        <button
+                          key={slot}
+                          type="button"
+                          className={`time-slot ${form.time === slot ? 'selected' : ''}`}
+                          onClick={() => setForm({ ...form, time: slot })}
+                        >
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <textarea
                   placeholder="Notes (optional)"
                   value={form.notes}
@@ -235,14 +320,35 @@ function App() {
 
             {appointments.length > 0 && (
               <div className="appointments-list">
-                <h3>Requested appointments</h3>
-                {appointments.map((appt, i) => (
-                  <div key={i} className="appointment-item">
-                    <strong>{appt.name}</strong>
-                    <span>{appt.email}</span>
-                    <span>{appt.date}</span>
-                  </div>
-                ))}
+                <h3>📅 Appointment Schedule</h3>
+                <div className="schedule-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Patient Name</th>
+                        <th>Doctor</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {appointments
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
+                        .map((appt, i) => (
+                          <tr key={i}>
+                            <td>{appt.name}</td>
+                            <td>{appt.doctor}</td>
+                            <td>{new Date(appt.date).toLocaleDateString()}</td>
+                            <td><strong>{appt.time}</strong></td>
+                            <td>{appt.email}</td>
+                            <td>{appt.phone}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </section>

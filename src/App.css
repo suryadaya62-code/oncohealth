@@ -480,6 +480,114 @@
   font-weight: 600;
 }
 
+/* ── DOCTOR & TIME SELECTION ── */
+.form-select {
+  font-family: var(--font);
+  font-size: 14px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+
+.form-select:focus {
+  border-color: var(--teal);
+  background: white;
+}
+
+.time-slots {
+  margin: 8px 0;
+}
+
+.time-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.time-slot {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font);
+}
+
+.time-slot:hover {
+  border-color: var(--teal);
+  background: var(--teal-light);
+}
+
+.time-slot.selected {
+  background: var(--teal);
+  color: white;
+  border-color: var(--teal-dark);
+}
+
+/* ── APPOINTMENT LIST ── */
+.appointments-list {
+  max-width: 760px;
+  margin: 24px auto 0;
+}
+
+.appointments-list h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+
+.schedule-table {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow-x: auto;
+}
+
+.schedule-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.schedule-table th {
+  background: var(--teal-light);
+  color: var(--teal-dark);
+  font-weight: 600;
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.schedule-table tr:hover {
+  background: var(--bg);
+}
+
 /* ── APPOINTMENT LIST ── */
 .appointments-list {
   max-width: 760px;
@@ -492,27 +600,6 @@
   color: var(--muted);
   margin-bottom: 10px;
   padding: 0 4px;
-}
-
-.appointment-item {
-  background: var(--teal-light);
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.appointment-item strong {
-  font-size: 14px;
-  color: var(--teal-dark);
-}
-
-.appointment-item span {
-  font-size: 13px;
-  color: var(--muted);
 }
 
 /* ── TEAM PAGE ── */
