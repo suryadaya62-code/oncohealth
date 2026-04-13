@@ -53,8 +53,9 @@ const doctorSchedule = {
   },
 };
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 function App() {
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
   const [page, setPage] = useState('home');
   const [form, setForm] = useState({ 
     name: '', 
@@ -68,18 +69,20 @@ function App() {
   const [appointments, setAppointments] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const [backendReady, setBackendReady] = useState(false);
+  const [backendReady, setBackendReady] = useState(true);
+  const [pinging, setPinging] = useState(true);
   const appointmentRef = useRef(null);
 
   // Ping backend on load to wake it up from Render sleep
   useEffect(() => {
+    if (!BACKEND_URL) {
+      setPinging(false);
+      return;
+    }
     fetch(`${BACKEND_URL}/api/ping`)
-      .then(() => setBackendReady(true))
-      .catch(() => {
-        // Backend unreachable — still allow form, but warn user
-        setBackendReady(false);
-      });
-  }, [BACKEND_URL]);
+      .then(() => { setBackendReady(true); setPinging(false); })
+      .catch(() => { setBackendReady(true); setPinging(false); });
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -91,7 +94,11 @@ function App() {
     
     try {
       setError('');
-      
+
+      if (!BACKEND_URL) {
+        throw new Error('Backend URL is not configured. Please contact the clinic directly.');
+      }
+
       // Send to backend to trigger notifications
       const response = await fetch(`${BACKEND_URL}/api/appointments`, {
         method: 'POST',
@@ -319,12 +326,12 @@ function App() {
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
-                {!backendReady && (
+                {pinging && (
                   <p className="form-notice">⏳ Connecting to server, please wait a moment...</p>
                 )}
                 {error && <p className="form-error">{error}</p>}
-                <button type="submit" className="book-btn" disabled={!backendReady}>
-                  {backendReady ? 'Book appointment' : 'Connecting...'}
+                <button type="submit" className="book-btn">
+                  Book appointment
                 </button>
                 {submitted && (
                   <p className="form-success">Thank you! We will contact you shortly.</p>

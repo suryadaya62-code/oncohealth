@@ -8,6 +8,7 @@
     "react-scripts": "5.0.1"
   },
   "scripts": {
+    "postinstall": "node -e \"require('child_process').execSync('npm install --prefix backend', {stdio: 'inherit'})\"",
     "start": "node start.js",
     "start-react": "react-scripts start",
     "build": "react-scripts build",

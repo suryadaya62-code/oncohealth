@@ -6,19 +6,12 @@ const isRender = process.env.RENDER === 'true' || process.env.RENDER;
 if (isRender) {
   console.log('🌍 Detected Render Deployment! Starting Backend...');
   
-  // 1. Install backend dependencies first
-  console.log('📦 Installing backend dependencies...');
-  const install = spawn('npm', ['install'], { cwd: './backend', stdio: 'inherit' });
+  // Start the backend server directly (dependencies are installed during build)
+  console.log('🚀 Starting Express backend...');
+  const child = spawn('node', ['server.js'], { cwd: './backend', stdio: 'inherit' });
   
-  install.on('close', (code) => {
-    if (code !== 0) {
-      console.error(`Backend install failed with code ${code}`);
-      process.exit(code);
-    }
-    
-    // 2. Start the backend server
-    console.log('🚀 Starting Express backend...');
-    spawn('node', ['server.js'], { cwd: './backend', stdio: 'inherit' });
+  child.on('error', (err) => {
+    console.error('Failed to start backend server:', err);
   });
 
 } else {
