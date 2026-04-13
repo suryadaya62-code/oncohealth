@@ -469,6 +469,12 @@
   background: var(--teal-dark);
 }
 
+.book-btn:disabled {
+  background: #a0bfcc;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .form-error {
   font-size: 13px;
   color: #c0392b;
@@ -478,6 +484,15 @@
   font-size: 13px;
   color: var(--teal-dark);
   font-weight: 600;
+}
+
+.form-notice {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--teal-light);
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: center;
 }
 
 /* ── DOCTOR & TIME SELECTION ── */

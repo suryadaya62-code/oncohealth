@@ -7,9 +7,24 @@ const { sendAppointmentNotifications } = require('./notificationService');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Allowed origins: localhost for dev + any HTTPS origin for production (Netlify, etc.)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    // Allow localhost and any HTTPS origin (covers all Netlify/custom domains)
+    if (allowedOrigins.includes(origin) || origin.startsWith('https://')) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS: Origin not allowed - ' + origin));
+  },
   credentials: true,
 }));
 app.use(bodyParser.json());
@@ -18,6 +33,11 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running' });
+});
+
+// Keep-alive ping (called by frontend to wake up Render on first load)
+app.get('/api/ping', (req, res) => {
+  res.json({ pong: true, timestamp: new Date().toISOString() });
 });
 
 /**
@@ -37,7 +57,7 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     // Validate phone number format (basic validation)
-    if (!phone.match(/^\\+?[0-9\\s\\-\\(\\)]+$/)) {
+    if (!phone.match(/^\+?[0-9\s\-\(\)]+$/)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid phone number format',
@@ -55,25 +75,27 @@ app.post('/api/appointments', async (req, res) => {
       bookingTime: new Date().toISOString(),
     };
 
-    // Send notifications
+    // Send notifications (best-effort — booking succeeds even if notifications fail)
     console.log('Processing appointment booking...');
-    const notificationResults = await sendAppointmentNotifications(appointmentData);
+    let notificationResults = { whatsapp: null, email: null };
+    try {
+      notificationResults = await sendAppointmentNotifications(appointmentData);
+    } catch (notifError) {
+      console.warn('Notification sending failed (non-blocking):', notifError.message);
+    }
 
-    // Check if at least one notification was successful
     const whatsappSuccess = notificationResults.whatsapp?.success;
     const emailSuccess = notificationResults.email?.success;
 
+    // Log notification failures but don't block the booking
     if (!whatsappSuccess && !emailSuccess) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to send notifications',
-        details: notificationResults,
-      });
+      console.warn('Both notifications failed — booking still saved.');
     }
 
     res.status(201).json({
       success: true,
-      message: 'Appointment booked successfully. Confirmation sent via WhatsApp and Email.',
+      message: 'Appointment booked successfully.' +
+        (whatsappSuccess || emailSuccess ? ' Confirmation sent.' : ' Notifications could not be sent, but your appointment is saved.'),
       appointment: appointmentData,
       notifications: notificationResults,
     });

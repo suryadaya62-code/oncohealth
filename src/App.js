@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import Team from './Team';
 import doctors from './data/doctors';
@@ -68,7 +68,18 @@ function App() {
   const [appointments, setAppointments] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [backendReady, setBackendReady] = useState(false);
   const appointmentRef = useRef(null);
+
+  // Ping backend on load to wake it up from Render sleep
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/ping`)
+      .then(() => setBackendReady(true))
+      .catch(() => {
+        // Backend unreachable — still allow form, but warn user
+        setBackendReady(false);
+      });
+  }, [BACKEND_URL]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -308,9 +319,12 @@ function App() {
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
+                {!backendReady && (
+                  <p className="form-notice">⏳ Connecting to server, please wait a moment...</p>
+                )}
                 {error && <p className="form-error">{error}</p>}
-                <button type="submit" className="book-btn">
-                  Book appointment
+                <button type="submit" className="book-btn" disabled={!backendReady}>
+                  {backendReady ? 'Book appointment' : 'Connecting...'}
                 </button>
                 {submitted && (
                   <p className="form-success">Thank you! We will contact you shortly.</p>
