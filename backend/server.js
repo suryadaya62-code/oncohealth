@@ -2,10 +2,15 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const path = require('path');
 const { sendAppointmentNotifications } = require('./notificationService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Serve static files from React build
+const buildPath = path.join(__dirname, '../build');
+app.use(express.static(buildPath));
 
 // Allowed origins: localhost for dev + any HTTPS origin for production (Netlify, etc.)
 const allowedOrigins = [
@@ -154,6 +159,11 @@ app.use((err, req, res, next) => {
     message: 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? err.message : 'An error occurred',
   });
+});
+
+// Catch-all: Serve React app for any route not matched (client-side routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(buildPath, 'index.html'));
 });
 
 // Start server
