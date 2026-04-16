@@ -10,5 +10,3 @@ services:
         value: production
       - key: RENDER
         value: "true"
-      - key: REACT_APP_BACKEND_URL
-        value: ""
