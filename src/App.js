@@ -54,6 +54,7 @@ const doctorSchedule = {
 };
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+console.log("Backend:", BACKEND_URL); 
 
 function App() {
   const [page, setPage] = useState('home');
@@ -69,7 +70,6 @@ function App() {
   const [appointments, setAppointments] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const [backendReady, setBackendReady] = useState(true);
   const [pinging, setPinging] = useState(true);
   const appointmentRef = useRef(null);
 
@@ -80,8 +80,8 @@ function App() {
       return;
     }
     fetch(`${BACKEND_URL}/api/ping`)
-      .then(() => { setBackendReady(true); setPinging(false); })
-      .catch(() => { setBackendReady(true); setPinging(false); });
+      .then(() => { setPinging(false); })
+      .catch(() => { setPinging(false); });
   }, []);
 
   const handleSubmit = async (e) => {
@@ -91,13 +91,17 @@ function App() {
       setSubmitted(false);
       return;
     }
-    
+
     try {
       setError('');
 
       if (!BACKEND_URL) {
         throw new Error('Backend URL is not configured. Please contact the clinic directly.');
       }
+
+      // Create abort controller for timeout (30 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       // Send to backend to trigger notifications
       const response = await fetch(`${BACKEND_URL}/api/appointments`, {
@@ -106,22 +110,34 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(form),
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      clearTimeout(timeoutId);
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw new Error(`Server responded with invalid data (${response.status}). Please try again.`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to book appointment');
+        throw new Error(data.message || `Server error: ${response.status}`);
       }
 
       // Add to local list
       setAppointments([...appointments, form]);
       setSubmitted(true);
       setForm({ name: '', email: '', phone: '', doctor: '', date: '', time: '', notes: '' });
-      
+
       setTimeout(() => setSubmitted(false), 4000);
     } catch (err) {
-      setError(err.message || 'Error booking appointment. Please try again.');
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server is not responding. Please try again later.');
+      } else {
+        setError(err.message || 'Error booking appointment. Please try again.');
+      }
       console.error('Appointment booking error:', err);
     }
   };

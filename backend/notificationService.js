@@ -1,17 +1,21 @@
 const twilio = require('twilio');
 const nodemailer = require('nodemailer');
 
-// Initialize Twilio client
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Initialize Twilio client (only if credentials are available)
+const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
 
-// Configure email transporter
-const emailTransporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Configure email transporter (only if credentials are available)
+const emailTransporter = (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    })
+  : null;
 
 /**
  * Send WhatsApp notification via Twilio
@@ -19,6 +23,11 @@ const emailTransporter = nodemailer.createTransport({
  * @param {object} appointmentData - Appointment details
  */
 async function sendWhatsAppNotification(phoneNumber, appointmentData) {
+  if (!twilioClient) {
+    console.log('WhatsApp notifications not configured (missing Twilio credentials)');
+    return { success: false, error: 'WhatsApp not configured' };
+  }
+
   try {
     const message = `
 Hello ${appointmentData.name},
@@ -57,6 +66,11 @@ OncoHealth Team
  * @param {object} appointmentData - Appointment details
  */
 async function sendEmailNotification(email, appointmentData) {
+  if (!emailTransporter) {
+    console.log('Email notifications not configured (missing email credentials)');
+    return { success: false, error: 'Email not configured' };
+  }
+
   try {
     const mailOptions = {
       from: process.env.EMAIL_FROM,
@@ -84,7 +98,7 @@ async function sendEmailNotification(email, appointmentData) {
     <div class="content">
       <p>Dear ${appointmentData.name},</p>
       <p>Thank you for scheduling your appointment with us!</p>
-      
+
       <div class="details">
         <div class="detail-item">
           <strong>📅 Appointment Date:</strong> ${new Date(appointmentData.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -105,9 +119,9 @@ async function sendEmailNotification(email, appointmentData) {
       </div>
 
       <p>Our care team will reach out to you shortly to confirm the details and answer any questions you may have.</p>
-      
+
       <p>If you need to reschedule or have any concerns, please don't hesitate to contact us.</p>
-      
+
       <p>Best regards,<br><strong>OncoHealth Team</strong></p>
     </div>
     <div class="footer">

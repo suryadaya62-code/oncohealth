@@ -14,7 +14,7 @@ const allowedOrigins = [
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
 ];
 
-// Middleware
+// Middleware - CORS configuration
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, Postman)
@@ -158,10 +158,10 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`\\n🚀 OncoHealth Backend Server is running on port ${PORT}`);
+  console.log(`\n🚀 OncoHealth Backend Server is running on port ${PORT}`);
   console.log(`📧 Email notifications: ${process.env.EMAIL_USER ? 'Configured' : 'Not configured'}`);
   console.log(`📱 WhatsApp notifications: ${process.env.TWILIO_ACCOUNT_SID ? 'Configured' : 'Not configured'}`);
-  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}\\n`);
+  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}\n`);
 });
 
 module.exports = app;
