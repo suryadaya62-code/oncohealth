@@ -3,14 +3,23 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 const { sendAppointmentNotifications } = require('./notificationService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Serve static files from React build
-const buildPath = path.join(__dirname, '../build');
-app.use(express.static(buildPath));
+const buildPath = path.resolve(__dirname, '../build');
+console.log('📁 Looking for build folder at:', buildPath);
+console.log('📁 Build folder exists:', fs.existsSync(buildPath));
+
+if (fs.existsSync(buildPath)) {
+  app.use(express.static(buildPath));
+  console.log('✅ Static file serving enabled');
+} else {
+  console.warn('⚠️  Build folder not found - static files will not be served');
+}
 
 // Allowed origins: localhost for dev + any HTTPS origin for production (Netlify, etc.)
 const allowedOrigins = [
@@ -163,7 +172,16 @@ app.use((err, req, res, next) => {
 
 // Catch-all: Serve React app for any route not matched (client-side routing)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'));
+  const indexPath = path.join(buildPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).json({
+      success: false,
+      message: 'Frontend not available - build folder missing or index.html not found',
+      buildPath: buildPath,
+    });
+  }
 });
 
 // Start server
