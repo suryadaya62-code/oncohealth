@@ -1,4 +1,7 @@
-node_modules
-
-# Local Netlify folder
-.netlify
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example

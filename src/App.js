@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import Team from './Team';
 import doctors from './data/doctors';
+import AIChat from './AIChat';
 
 const services = [
   {
@@ -54,7 +55,6 @@ const doctorSchedule = {
 };
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-console.log("Backend:", BACKEND_URL); 
 
 function App() {
   const [page, setPage] = useState('home');
@@ -69,7 +69,10 @@ function App() {
   });
   const [appointments, setAppointments] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [retryMsg, setRetryMsg] = useState('');
   const [error, setError] = useState('');
+  const [fallbackWarning, setFallbackWarning] = useState('');
   const [pinging, setPinging] = useState(true);
   const appointmentRef = useRef(null);
 
@@ -79,67 +82,103 @@ function App() {
       setPinging(false);
       return;
     }
+    const pingTimeout = setTimeout(() => setPinging(false), 70000);
     fetch(`${BACKEND_URL}/api/ping`)
-      .then(() => { setPinging(false); })
-      .catch(() => { setPinging(false); });
+      .then(() => { clearTimeout(pingTimeout); setPinging(false); })
+      .catch(() => { clearTimeout(pingTimeout); setPinging(false); });
+    return () => clearTimeout(pingTimeout);
   }, []);
+
+  const attemptBooking = (formData, signal) =>
+    fetch(`${BACKEND_URL}/api/appointments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+      signal,
+    });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.phone || !form.doctor || !form.date || !form.time) {
       setError('Please fill in all required fields.');
-      setSubmitted(false);
       return;
     }
 
-    try {
-      setError('');
+    setError('');
+    setFallbackWarning('');
+    setRetryMsg('');
+    setLoading(true);
 
-      if (!BACKEND_URL) {
-        throw new Error('Backend URL is not configured. Please contact the clinic directly.');
-      }
+    if (!BACKEND_URL) {
+      setError('Backend URL is not configured. Please contact the clinic directly.');
+      setLoading(false);
+      return;
+    }
 
-      // Create abort controller for timeout (30 seconds)
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 8000;
+    let lastErr = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 65000);
 
-      // Send to backend to trigger notifications
-      const response = await fetch(`${BACKEND_URL}/api/appointments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      let data;
       try {
-        data = await response.json();
-      } catch (parseError) {
-        throw new Error(`Server responded with invalid data (${response.status}). Please try again.`);
-      }
+        if (attempt > 1) {
+          setRetryMsg(`Server is waking up… retrying (${attempt}/${MAX_ATTEMPTS})`);
+          await new Promise((res) => setTimeout(res, RETRY_DELAY_MS));
+        }
 
-      if (!response.ok) {
-        throw new Error(data.message || `Server error: ${response.status}`);
-      }
+        const response = await attemptBooking(form, controller.signal);
+        clearTimeout(timeoutId);
 
-      // Add to local list
-      setAppointments([...appointments, form]);
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(`Server responded with invalid data (${response.status}). Please try again.`);
+        }
+
+        if (!response.ok) {
+          throw new Error(data.message || `Server error: ${response.status}`);
+        }
+
+        // Success
+        setAppointments((prev) => [...prev, form]);
+        setSubmitted(true);
+        setLoading(false);
+        setRetryMsg('');
+        setForm({ name: '', email: '', phone: '', doctor: '', date: '', time: '', notes: '' });
+        setTimeout(() => setSubmitted(false), 4000);
+        return;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        lastErr = err;
+        const isNetworkError =
+          err.name === 'AbortError' || err.message?.toLowerCase().includes('failed to fetch');
+        if (!isNetworkError) break; // non-network error — don't retry
+      }
+    }
+
+    // All attempts failed
+    setLoading(false);
+    setRetryMsg('');
+    const isNetworkError =
+      lastErr?.name === 'AbortError' || lastErr?.message?.toLowerCase().includes('failed to fetch');
+
+    if (isNetworkError) {
+      setFallbackWarning(
+        'Server unavailable after multiple attempts. Your appointment has been saved locally — please call the clinic to confirm.'
+      );
+      setAppointments((prev) => [...prev, form]);
       setSubmitted(true);
       setForm({ name: '', email: '', phone: '', doctor: '', date: '', time: '', notes: '' });
-
-      setTimeout(() => setSubmitted(false), 4000);
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('Request timed out. The server is not responding. Please try again later.');
-      } else {
-        setError(err.message || 'Error booking appointment. Please try again.');
-      }
-      console.error('Appointment booking error:', err);
+      setTimeout(() => { setSubmitted(false); setFallbackWarning(''); }, 8000);
+    } else {
+      setError(lastErr?.message || 'Error booking appointment. Please try again.');
     }
+
+    console.error('Appointment booking error:', lastErr);
   };
 
   const scrollToAppt = () => {
@@ -176,7 +215,7 @@ function App() {
       </nav>
 
       {/* TEAM PAGE */}
-      {page === 'team' && <Team doctors={doctors} onBack={showHome} />}
+      {page === 'team' && <Team doctors={doctors} onBack={showHome} onBookAppointment={scrollToAppt} />}
 
       {/* HOME PAGE */}
       {page === 'home' && (
@@ -318,6 +357,7 @@ function App() {
                 <input
                   type="date"
                   value={form.date}
+                  min={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                 />
                 {form.doctor && (
@@ -343,11 +383,13 @@ function App() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
                 {pinging && (
-                  <p className="form-notice">⏳ Connecting to server, please wait a moment...</p>
+                  <p className="form-notice">⏳ Waking up server, this may take up to 30 seconds…</p>
                 )}
+                {retryMsg && <p className="form-notice">{retryMsg}</p>}
                 {error && <p className="form-error">{error}</p>}
-                <button type="submit" className="book-btn">
-                  Book appointment
+                {fallbackWarning && <p className="form-warning">{fallbackWarning}</p>}
+                <button type="submit" className="book-btn" disabled={pinging || loading}>
+                  {loading ? 'Booking…' : pinging ? 'Please wait…' : 'Book appointment'}
                 </button>
                 {submitted && (
                   <p className="form-success">Thank you! We will contact you shortly.</p>
@@ -371,7 +413,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {appointments
+                      {[...appointments]
                         .sort((a, b) => new Date(a.date) - new Date(b.date))
                         .map((appt, i) => (
                           <tr key={i}>
@@ -404,6 +446,9 @@ function App() {
           </footer>
         </>
       )}
+      
+      {/* AI Assistant Chatbot */}
+      <AIChat backendUrl={BACKEND_URL} />
     </div>
   );
 }

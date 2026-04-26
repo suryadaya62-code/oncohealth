@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "Suryadaya62@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidAppointment(data) {
+      return data.patientName is string && data.patientName.size() > 0 && data.patientName.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 255 &&
+             data.doctor is string && data.doctor.size() <= 100 &&
+             data.date is string && data.date.size() <= 50 &&
+             data.slot is string && data.slot.size() <= 50 &&
+             data.status in ['confirmed', 'pending', 'cancelled'] &&
+             data.createdAt == request.time;
+    }
+
+    // Collection: users
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Collection: appointments
+    match /appointments/{appointmentId} {
+      // Patients can create without being signed in (Guest booking)
+      allow create: if isValidAppointment(request.resource.data);
+      
+      // Only admins can read all/list or individuals for now
+      // (Future: allow users to read their own if we add patientUid to data)
+      allow read, list: if isAdmin();
+      
+      allow update, delete: if isAdmin();
+    }
+  }
+}

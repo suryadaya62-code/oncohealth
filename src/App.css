@@ -486,6 +486,15 @@
   font-weight: 600;
 }
 
+.form-warning {
+  font-size: 13px;
+  color: #9a6b00;
+  background: #fff9e6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
 .form-notice {
   font-size: 13px;
   color: var(--muted);
@@ -555,20 +564,6 @@
   background: var(--teal);
   color: white;
   border-color: var(--teal-dark);
-}
-
-/* ── APPOINTMENT LIST ── */
-.appointments-list {
-  max-width: 760px;
-  margin: 24px auto 0;
-}
-
-.appointments-list h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 14px;
-  padding: 0 4px;
 }
 
 .schedule-table {

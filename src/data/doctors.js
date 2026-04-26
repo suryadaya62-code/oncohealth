@@ -1,14 +1,14 @@
 const doctors = [
   {
     name: "Dr. Devmalya Banerjee",
-    initials: "DD",
+    initials: "DB",
     role: "Primary Consultant",
     bio: "Primary consultant providing comprehensive patient care and clinical oversight.",
     highlight: true,
   },
   {
     name: "Dr. Pritam Ray",
-    initials: "DP",
+    initials: "PR",
     role: "Onco Consultant",
     bio: "Specialized oncology consultant with expertise in cancer diagnosis and treatment planning.",
   },

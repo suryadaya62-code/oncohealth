@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
 const { sendAppointmentNotifications } = require('./notificationService');
+const { generateText } = require('./aiService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -158,6 +159,28 @@ app.get('/api/appointments', (req, res) => {
     appointments,
     total: appointments.length,
   });
+});
+
+/**
+ * POST /api/ai/chat
+ * Endpoint to interact with Google AI Studio (Gemini)
+ */
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ success: false, message: 'Prompt is required' });
+    }
+    
+    const responseText = await generateText(prompt);
+    res.json({ success: true, response: responseText });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to connect to Google AI Studio', 
+      error: error.message 
+    });
+  }
 });
 
 // Error handling middleware
