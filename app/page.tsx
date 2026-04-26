@@ -487,20 +487,12 @@ END:VCALENDAR`;
                       <span className="text-slate text-xl">₹1,500</span>
                     </div>
 
-                    <div className="w-36 h-36 bg-white border border-border p-3 mb-2 rounded-xl flex items-center justify-center relative group shadow-sm transition-all hover:shadow-xl hover:scale-105">
-                      <QRCodeSVG 
-                        value={`upi://pay?pa=suryadaya62@pingpay&pn=Suryadaya%20Bhattacharjee&am=1500&cu=INR&tn=OncoHealth%20Consultation`}
-                        size={120}
-                        level="H"
-                        includeMargin={false}
-                        imageSettings={{
-                          src: "https://ais-dev-qrj7ksec36udto7xbxfm6r-298614808685.asia-southeast1.run.app/favicon.ico",
-                          x: undefined,
-                          y: undefined,
-                          height: 24,
-                          width: 24,
-                          excavate: true,
-                        }}
+                    <div className="w-40 h-64 bg-white border border-border p-3 mb-2 rounded-xl flex items-center justify-center relative group shadow-sm transition-all hover:shadow-xl hover:scale-105 overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src="/samsung-qr.jpg" 
+                        alt="Samsung Wallet Payment QR" 
+                        className="w-full h-full object-contain rounded-lg"
                       />
                       <div className="absolute inset-0 bg-white/95 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] font-bold text-slate text-center p-3 rounded-xl border-2 border-teal">
                         <Lock size={16} className="text-teal mb-2" />
