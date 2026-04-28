@@ -190,7 +190,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen selection:bg-teal selection:text-white">
       {/* Premium Header */}
-      <header className="h-20 bg-white/80 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-50">
+      <header className="h-20 bg-white/70 backdrop-blur-3xl border-b border-slate-100 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-3 font-bold text-slate text-xl group cursor-pointer" onClick={() => { setActiveMode('booking'); setBookingStep(1); }}>
           <div className="w-9 h-9 flex items-center justify-center border-2 border-teal rounded-xl bg-teal/5 text-teal animate-float shadow-lg shadow-teal/10">
             <Stethoscope size={22} />
@@ -350,7 +350,14 @@ export default function Home() {
                       <div className="section-label mb-5">Available Time Slots</div>
                       <div className="grid grid-cols-4 gap-3 mb-8">
                         {selectedDoctor.schedule.map((slot) => (
-                          <button key={slot} onClick={() => setSelectedSlot(slot)} className={`py-4 rounded-xl text-[10px] font-black transition-all border-2 uppercase tracking-widest ${selectedSlot === slot ? 'bg-teal border-teal text-white shadow-xl shadow-teal/20 scale-105' : 'bg-white/50 border-slate-100 hover:border-teal/30 text-slate-500'}`}>{slot}</button>
+                          <button 
+                            key={slot} 
+                            onClick={() => setSelectedSlot(slot)} 
+                            className={`py-4 rounded-xl text-[10px] font-black transition-all border-2 uppercase tracking-widest flex items-center justify-center gap-2 ${selectedSlot === slot ? 'bg-teal border-teal text-white shadow-xl shadow-teal/20 scale-105' : 'bg-white/50 border-slate-100 hover:border-teal/30 text-slate-500'}`}
+                          >
+                            {selectedSlot === slot && <CheckCircle2 size={10} />}
+                            {slot}
+                          </button>
                         ))}
                       </div>
 
@@ -420,8 +427,13 @@ export default function Home() {
                     </motion.div>
                   ) : (
                     <motion.div key="step-3" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col h-full items-center justify-center text-center p-10">
-                      <div className="w-24 h-24 bg-teal/5 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-inner animate-float">
-                        <CheckCircle2 size={48} className="text-teal" />
+                      <div className="relative mb-8">
+                        <div className="w-24 h-24 bg-teal/5 rounded-[2.5rem] flex items-center justify-center shadow-inner animate-float">
+                          <CheckCircle2 size={48} className="text-teal" />
+                        </div>
+                        <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl border-4 border-white overflow-hidden shadow-xl">
+                          <Image src={selectedDoctor.image} alt={selectedDoctor.name} fill className="object-cover" />
+                        </div>
                       </div>
                       <h2 className="text-4xl font-black text-slate italic tracking-tighter mb-4">Confirmed!</h2>
                       <p className="text-text-muted text-sm font-bold max-w-sm mb-12 leading-relaxed">Your oncology consultation record has been encrypted and synced with <span className="text-teal underline underline-offset-4 decoration-2">{formData.email}</span>.</p>
