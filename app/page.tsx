@@ -238,11 +238,11 @@ END:VCALENDAR`;
     <div className="flex flex-col min-h-screen">
       {/* Header */}
           <header className="h-20 bg-white border-b border-border flex items-center justify-between px-6 lg:px-10 sticky top-0 z-50">
-        <div className="flex items-center gap-3 font-bold text-slate text-xl">
-          <div className="w-8 h-8 flex items-center justify-center border-2 border-slate rounded">
+        <div className="flex items-center gap-3 font-bold text-slate text-xl group cursor-pointer">
+          <div className="w-8 h-8 flex items-center justify-center border-2 border-teal rounded bg-teal/5 text-teal animate-float">
             <Stethoscope size={20} />
           </div>
-          OncoHealth
+          <span className="tracking-tight uppercase font-black italic">Onco<span className="text-teal">Health</span></span>
         </div>
         
         <div className="flex items-center gap-4 lg:gap-8">
@@ -314,7 +314,11 @@ END:VCALENDAR`;
     </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 bg-bg p-4 lg:p-8">
+      <main className="flex-1 bg-bg p-4 lg:p-8 relative overflow-hidden">
+        {/* Decorative background blobs */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-teal/5 rounded-full blur-3xl -z-10 animate-pulse" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-lavender/5 rounded-full blur-3xl -z-10" />
+        
         <AnimatePresence mode="wait">
           {activeMode === 'portal' ? (
             <motion.div 
