@@ -121,6 +121,7 @@ export async function POST(req: Request) {
     results.sms = { status: 'error', message: 'TWILIO credentials missing' };
   }
 
+    // Unified response
     return NextResponse.json({ success: true, results });
   } catch (err: any) {
     console.error('Unified notify failure:', err);

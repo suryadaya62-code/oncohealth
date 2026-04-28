@@ -38,7 +38,6 @@ if (isRender) {
 } else {
   // If we are developing locally, start the React frontend
   console.log('💻 Local environment detected. Starting React frontend...');
-  
   runNpm(['run', 'start-react'], {
     stdio: 'inherit',
   });

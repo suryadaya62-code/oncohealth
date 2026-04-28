@@ -1,50 +1,116 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Global Deny
+    // 0. Global Safety Net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Helper functions
+    // --- Helpers ---
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.email == "Suryadaya62@gmail.com" && request.auth.token.email_verified == true)
-      );
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isValidAppointment(data) {
-      return data.patientName is string && data.patientName.size() > 0 && data.patientName.size() <= 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() <= 255 &&
-             data.doctor is string && data.doctor.size() <= 100 &&
-             data.date is string && data.date.size() <= 50 &&
-             data.slot is string && data.slot.size() <= 50 &&
-             data.status in ['confirmed', 'pending', 'cancelled'] &&
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isDoctor() {
+      return isSignedIn() && getUserData().role == 'doctor';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['patient', 'doctor', 'admin'] &&
              data.createdAt == request.time;
     }
 
-    // Collection: users
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['patientName', 'email', 'phone', 'doctor', 'date', 'slot', 'createdAt', 'status']) &&
+             data.patientName is string && data.patientName.size() <= 100 &&
+             data.email is string && data.email.matches('^.+@.+$') &&
+             data.status in ['pending', 'confirmed', 'completed', 'cancelled'] &&
+             data.createdAt == request.time;
     }
 
-    // Collection: appointments
+    function isValidPrescription(data) {
+      return data.keys().hasAll(['userId', 'doctorName', 'medication', 'dosage', 'frequency', 'createdAt']) &&
+             data.userId is string &&
+             data.medication is string &&
+             data.createdAt == request.time;
+    }
+
+    function isValidMedicalRecord(data) {
+      return data.keys().hasAll(['userId', 'title', 'type', 'date', 'createdAt']) &&
+             data.userId is string &&
+             data.type in ['lab-result', 'diagnosis', 'imaging', 'surgery'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'receiverId', 'participants', 'content', 'timestamp']) &&
+             data.senderId == request.auth.uid &&
+             data.participants.hasAll([data.senderId, data.receiverId]) &&
+             data.participants.size() == 2 &&
+             data.content is string && data.content.size() <= 1000 &&
+             data.timestamp == request.time;
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && (
+        incoming().role == existing().role || 
+        (request.auth.token.email.lower() == 'suryadaya62@gmail.com' && request.auth.token.email_verified == true && incoming().role == 'admin')
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /appointments/{appointmentId} {
-      // Patients can create without being signed in (Guest booking)
-      allow create: if isValidAppointment(request.resource.data);
-      
-      // Only admins can read all/list or individuals for now
-      // (Future: allow users to read their own if we add patientUid to data)
-      allow read, list: if isAdmin();
-      
+      allow create: if isValidAppointment(incoming());
+      allow get: if isValidId(appointmentId);
+      allow list: if isSignedIn() && (resource.data.email == request.auth.token.email || isDoctor() || isAdmin());
+      allow update, delete: if isDoctor() || isAdmin();
+    }
+
+    match /prescriptions/{prescriptionId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isDoctor() || isAdmin());
+      allow create, update, delete: if isDoctor() || isAdmin();
+    }
+
+    match /medicalRecords/{recordId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isDoctor() || isAdmin());
+      allow create, update, delete: if isDoctor() || isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if isSignedIn() && isValidMessage(incoming());
       allow update, delete: if isAdmin();
     }
   }

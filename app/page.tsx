@@ -15,12 +15,15 @@ import {
   MapPin,
   Lock,
   Download,
-  ExternalLink
+  ExternalLink,
+  LogIn,
+  LogOut,
+  LayoutDashboard,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { QRCodeSVG } from 'qrcode.react';
-import { 
-  format, 
+
+import { format, 
   addMonths, 
   subMonths, 
   startOfMonth, 
@@ -32,7 +35,7 @@ import {
   isSameDay, 
   isToday 
 } from 'date-fns';
-import { db } from '@/lib/firebase';
+import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { 
   collection, 
   addDoc, 
@@ -41,6 +44,10 @@ import {
   serverTimestamp,
   Timestamp 
 } from 'firebase/firestore';
+import { useAuth } from '@/components/AuthContext';
+import PatientDashboard from '@/components/PatientDashboard';
+import Link from 'next/link';
+import Image from 'next/image';
 
 // OncoHealth Data Merge from GitHub
 const doctorsList = [
@@ -89,8 +96,11 @@ const services = [
 ];
 
 export default function Home() {
+  const { user, profile, login, logout, loading: authLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  const [activeMode, setActiveMode] = useState<'booking' | 'portal'>('booking');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState<Date>(new Date(2026, 3, 28)); 
   const [selectedDoctor, setSelectedDoctor] = useState(doctorsList[0]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [bookingStep, setBookingStep] = useState(1); // 1: Select, 2: Register & Pay, 3: Completed
@@ -98,10 +108,23 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<any>(null);
 
+  useEffect(() => {
+    setMounted(true);
+    setViewDate(new Date()); // Sync with client local time
+  }, []);
+
+  useEffect(() => {
+    if (user && (!formData.email || !formData.name)) {
+      setFormData(prev => ({ 
+        ...prev, 
+        email: user.email || prev.email, 
+        name: user.displayName || prev.name 
+      }));
+    }
+  }, [user]); // Only sync when user logs in or changes, not on every keystroke of the form
+
   const handleBookingSuccess = async () => {
-    setBookingStep(3);
     setIsSyncing(true);
-    
     const appointmentData = {
       patientName: formData.name,
       email: formData.email,
@@ -116,7 +139,14 @@ export default function Home() {
 
     try {
       // 1. Save to Firestore First (The source of truth)
-      const docRef = await addDoc(collection(db, 'appointments'), appointmentData);
+      const path = 'appointments';
+      try {
+        await addDoc(collection(db, path), appointmentData);
+        setBookingStep(3); // Only move to success screen if save worked
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+        return; // Prevent further execution if firestore fails
+      }
       
       // 2. Trigger Unified Notifications
       const res = await fetch('/api/notify', {
@@ -178,7 +208,7 @@ UID:${Date.now()}@oncohealth.app
 DTSTAMP:${format(new Date(), 'yyyyMMdd\'T\'HHmmss\'Z\'')}
 DTSTART:${dateStr}T143000Z
 DTEND:${dateStr}T153000Z
-SUMMARY:Consultation with Dr. Aris Thorne (OncoHealth)
+SUMMARY:Consultation with ${selectedDoctor.name} (OncoHealth)
 DESCRIPTION:Oncology consultation at Memorial Cancer Research Center.
 LOCATION:Wing B, Suite 402, Memorial Cancer Research Center
 END:VEVENT
@@ -216,10 +246,63 @@ END:VCALENDAR`;
         </div>
         
         <div className="flex items-center gap-4 lg:gap-8">
+          <nav className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-widest text-slate-500">
+            <button 
+              onClick={() => setActiveMode('booking')}
+              className={`hover:text-teal transition-colors ${activeMode === 'booking' ? 'text-teal border-b-2 border-teal pb-1' : ''}`}
+            >
+              Consultations
+            </button>
+            <button 
+              onClick={() => setActiveMode('portal')}
+              className={`hover:text-teal transition-colors ${activeMode === 'portal' ? 'text-teal border-b-2 border-teal pb-1' : ''}`}
+            >
+              Patient Portal
+            </button>
+          </nav>
+
           <div className="flex items-center gap-3">
+            {authLoading ? (
+              <div className="w-8 h-8 rounded-full border-2 border-teal border-t-transparent animate-spin" />
+            ) : user ? (
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block text-right">
+                  <p className="text-[10px] font-bold text-slate truncate max-w-[100px]">{user.displayName || user.email}</p>
+                  <div className="flex items-center gap-2 justify-end">
+                    {profile?.role === 'admin' && (
+                      <Link href="/admin" className="text-[8px] font-bold text-orange-500 uppercase tracking-widest hover:underline flex items-center gap-1">
+                        <ShieldCheck size={8} /> Admin
+                      </Link>
+                    )}
+                    <button onClick={logout} className="text-[8px] font-bold text-teal uppercase tracking-widest hover:underline">Sign Out</button>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full border-2 border-teal p-0.5 overflow-hidden relative">
+                  <Image 
+                    src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`} 
+                    alt="User" 
+                    fill
+                    className="rounded-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+            ) : (
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={login}
+                className="flex items-center gap-2 px-4 py-2 bg-slate text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+              >
+                <LogIn size={14} />
+                <span>Patient Login</span>
+              </motion.button>
+            )}
+            
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => window.open('tel:+919876543210', '_self')}
               className="theme-btn-emergency flex items-center gap-2"
             >
             <PhoneCall size={14} />
@@ -232,13 +315,60 @@ END:VCALENDAR`;
 
       {/* Main Content Area */}
       <main className="flex-1 bg-bg p-4 lg:p-8">
-          <motion.div 
-            key="patient-portal"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[320px_1fr_340px] gap-6"
-          >
+        <AnimatePresence mode="wait">
+          {activeMode === 'portal' ? (
+            <motion.div 
+              key="patient-dashboard"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-7xl mx-auto h-[calc(100vh-200px)] flex flex-col"
+            >
+              {!user ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border border-border shadow-sm">
+                   <div className="w-16 h-16 bg-teal/10 rounded-2xl flex items-center justify-center text-teal mb-6">
+                     <Lock size={32} />
+                   </div>
+                   <h2 className="text-xl font-bold text-slate mb-2">Secure Access Required</h2>
+                   <p className="text-sm text-text-muted max-w-sm mb-8">Please sign in with your verified email to access prescriptions, medical history, and direct messaging with our specialists.</p>
+                   <button 
+                    onClick={login}
+                    className="flex items-center gap-3 px-8 py-4 bg-slate text-white rounded-xl font-bold shadow-xl shadow-slate/20 hover:scale-[1.02] transition-transform"
+                   >
+                     <LogIn size={20} />
+                     Access Verified Portal
+                   </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate">Welcome back, {user.displayName?.split(' ')[0] || 'Patient'}</h1>
+                        <p className="text-xs text-text-muted">Access your clinical documents and secure communications.</p>
+                    </div>
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => setActiveMode('booking')}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-lg text-[10px] font-bold text-slate uppercase tracking-widest hover:bg-slate-50 shadow-sm"
+                       >
+                         <Plus size={14} /> New Appointment
+                       </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <PatientDashboard />
+                  </div>
+                </>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="booking-portal"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[320px_1fr_340px] gap-6"
+            >
             {/* Same Portal Content */}
           
           {/* Column 1: Team & Services */}
@@ -367,14 +497,14 @@ END:VCALENDAR`;
 
                     return (
                       <motion.button 
-                        key={day.toString()}
+                        key={format(day, 'yyyy-MM-dd')}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={() => setSelectedDate(day)}
                         className={`h-10 rounded-md transition-all flex items-center justify-center text-sm relative
                           ${!isCurrentMonth ? 'text-border grayscale opacity-40' : 'text-slate font-medium'}
                           ${isSelected ? 'bg-teal text-white ring-2 ring-teal/20 scale-105' : 'hover:bg-teal/10'}
-                          ${today && !isSelected ? 'border-b-2 border-teal' : ''}
+                          ${mounted && today && !isSelected ? 'border-b-2 border-teal' : ''}
                         `}
                       >
                         {format(day, 'd')}
@@ -489,9 +619,9 @@ END:VCALENDAR`;
 
                     <div className="w-40 h-64 bg-white border border-border p-3 mb-2 rounded-xl flex items-center justify-center relative group shadow-sm transition-all hover:shadow-xl hover:scale-105 overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src="/samsung-qr.jpg" 
-                        alt="Samsung Wallet Payment QR" 
+                      <img
+                        src="/samsung-qr.jpg"
+                        alt="Samsung Wallet Payment QR"
                         className="w-full h-full object-contain rounded-lg"
                       />
                       <div className="absolute inset-0 bg-white/95 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] font-bold text-slate text-center p-3 rounded-xl border-2 border-teal">
@@ -743,7 +873,9 @@ END:VCALENDAR`;
             </div>
           </motion.aside>
         </motion.div>
-      </main>
+      )}
+    </AnimatePresence>
+  </main>
 
       {/* Security Footer */}
       <footer className="h-12 bg-white border-t border-border flex items-center justify-center gap-4 lg:gap-10 text-[10px] lg:text-[11px] font-bold text-text-muted uppercase tracking-wider overflow-x-auto whitespace-nowrap px-4">
