@@ -46,6 +46,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthContext';
 import PatientDashboard from '@/components/PatientDashboard';
+import WhatsAppChat from '@/components/WhatsAppChat';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -380,7 +381,7 @@ END:VCALENDAR`;
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="theme-card"
+            className="theme-card glass-panel"
           >
             <div className="section-label">
               <UserIcon size={12} /> Our Specialists
@@ -445,6 +446,18 @@ END:VCALENDAR`;
                 ))}
               </div>
             </div>
+
+            <div className="mt-8 theme-card bg-slate text-white border-none shadow-xl shadow-slate/20">
+              <div className="text-[10px] uppercase tracking-widest text-teal font-black mb-3">On-Duty Support</div>
+              <h3 className="text-sm font-bold mb-2">Emergency Assistance?</h3>
+              <p className="text-[10px] text-slate-300 mb-4 leading-relaxed">Our triage team is available 24/7 for urgent clinical queries.</p>
+              <button 
+                onClick={() => window.location.href = 'tel:+919876543210'}
+                className="theme-btn-emergency w-full"
+              >
+                Call Clinic Now
+              </button>
+            </div>
           </motion.aside>
 
           {/* Column 2: Booking System */}
@@ -452,7 +465,7 @@ END:VCALENDAR`;
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="theme-card"
+            className="theme-card border-teal/10 shadow-xl shadow-teal/5"
           >
             <div className="section-label">
               <CalendarIcon size={12} /> Appointment Schedule
@@ -811,7 +824,7 @@ END:VCALENDAR`;
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="theme-card"
+            className="theme-card glass-panel border-teal/5 shadow-xl shadow-teal/5"
           >
             <div className="section-label">
               <ShieldCheck size={12} /> Verification Guard
@@ -900,6 +913,9 @@ END:VCALENDAR`;
           Verified Patient Port
         </div>
       </footer>
+
+      {/* Client-only WhatsApp/Support Widget */}
+      {mounted && <WhatsAppChat />}
     </div>
   );
 }
