@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  PhoneCall, 
   ShieldCheck, 
   Mail, 
   MessageSquare, 
@@ -46,7 +45,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthContext';
 import PatientDashboard from '@/components/PatientDashboard';
-import WhatsAppChat from '@/components/WhatsAppChat';
+
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -228,10 +227,7 @@ export default function Home() {
               </motion.button>
             )}
             
-            <button onClick={() => window.open('tel:+919876543210', '_self')} className="theme-btn-emergency hidden sm:flex items-center gap-2 group">
-              <PhoneCall size={14} className="group-hover:animate-bounce" />
-              <span>Emergency Assistance</span>
-            </button>
+
           </div>
         </div>
       </header>
@@ -543,7 +539,7 @@ export default function Home() {
         <div className="flex items-center gap-2"><CheckCircle2 size={14} className="text-teal/40" /> Verified Portal</div>
       </footer>
 
-      {mounted && <WhatsAppChat />}
+
     </div>
   );
 }

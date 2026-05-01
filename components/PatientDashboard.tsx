@@ -27,9 +27,9 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { format } from 'date-fns';
-import WhatsAppChat from './WhatsAppChat';
 
-type Tab = 'appointments' | 'prescriptions' | 'history' | 'messages';
+
+type Tab = 'appointments' | 'prescriptions' | 'history';
 
 export default function PatientDashboard() {
   const { user, profile } = useAuth();
@@ -98,7 +98,7 @@ export default function PatientDashboard() {
           { id: 'appointments', icon: <Calendar size={18} />, label: 'Appointments' },
           { id: 'prescriptions', icon: <Pill size={18} />, label: 'Prescriptions' },
           { id: 'history', icon: <FileText size={18} />, label: 'History' },
-          { id: 'messages', icon: <MessageSquare size={18} />, label: 'Messages' },
+
         ].map((tab) => (
           <button
             key={tab.id}
@@ -211,9 +211,7 @@ export default function PatientDashboard() {
                     </div>
                   ))}
 
-                  {activeTab === 'messages' && (
-                    <WhatsAppChat />
-                  )}
+
                 </>
               )}
             </motion.div>
