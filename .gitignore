@@ -39,6 +39,7 @@ next-env.d.ts
 # IDEs
 .vscode/
 .idea/
+.claude/
 
 # temporary files
 tsc_help.txt
