@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig([
   {
-    ignores: ['dist/**/*']
+    ignores: ['dist/**/*', 'src/**/*', '.next/**/*']
   },
   ...next,
   firebaseRulesPlugin.configs['flat/recommended']

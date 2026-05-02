@@ -39,7 +39,7 @@ import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { format } from 'date-fns';
 import Link from 'next/link';
 
-type CollectionType = 'appointments' | 'users' | 'prescriptions' | 'medicalRecords' | 'messages';
+type CollectionType = 'appointments' | 'users' | 'prescriptions' | 'medicalRecords';
 
 export default function AdminPage() {
   const { user, profile, loading: authLoading, logout, login, loginLoading, authError } = useAuth();
@@ -54,8 +54,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user || profile?.role !== 'admin') return;
 
-    const orderByField = activeCollection === 'messages' ? 'timestamp' : 'createdAt';
-    const q = query(collection(db, activeCollection), orderBy(orderByField, 'desc'));
+    const q = query(collection(db, activeCollection), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setData(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -80,7 +79,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-teal border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
           <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">Authenticating...</p>
         </div>
       </div>
@@ -95,7 +94,7 @@ export default function AdminPage() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-md w-full bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl text-center"
         >
-          <div className="w-20 h-20 bg-teal/10 text-teal rounded-3xl flex items-center justify-center mx-auto mb-8 rotate-3">
+          <div className="w-20 h-20 bg-teal-600/10 text-teal-600 rounded-3xl flex items-center justify-center mx-auto mb-8 rotate-3">
             <ShieldCheck size={40} />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Admin Panel</h1>
@@ -140,7 +139,7 @@ export default function AdminPage() {
           </div>
           
           <div className="mt-10 pt-8 border-t border-slate-100">
-             <Link href="/" className="text-teal font-bold text-sm hover:underline">
+             <Link href="/" className="text-teal-600 font-bold text-sm hover:underline">
                Return to Public Site
              </Link>
           </div>
@@ -215,12 +214,9 @@ export default function AdminPage() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const isMessage = activeCollection === 'messages';
       await addDoc(collection(db, activeCollection), {
         ...editForm,
-        ...(isMessage 
-          ? { timestamp: serverTimestamp() } 
-          : { createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       });
       setShowAddForm(false);
       setEditForm({});
@@ -238,12 +234,12 @@ export default function AdminPage() {
       {/* Admin Sidebar */}
       <aside className="w-full md:w-72 bg-slate-900 text-white p-6 flex flex-col">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-teal rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center">
             <ShieldCheck size={24} className="text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Admin Console</h1>
-            <p className="text-[10px] text-teal uppercase tracking-widest font-bold">OncoHealth System</p>
+            <p className="text-[10px] text-teal-600 uppercase tracking-widest font-bold">OncoHealth System</p>
           </div>
         </div>
 
@@ -253,13 +249,12 @@ export default function AdminPage() {
             { id: 'users', label: 'Patients (Users)', icon: <Users size={18} /> },
             { id: 'prescriptions', label: 'Prescriptions', icon: <Pill size={18} /> },
             { id: 'medicalRecords', label: 'Medical History', icon: <FileText size={18} /> },
-            { id: 'messages', label: 'WhatsApp Messages', icon: <MessageSquare size={18} /> },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => handleCollectionChange(item.id as CollectionType)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all
-                ${activeCollection === item.id ? 'bg-teal text-white shadow-lg shadow-teal/20' : 'text-slate-400 hover:text-white hover:bg-white/5'}
+                ${activeCollection === item.id ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' : 'text-slate-400 hover:text-white hover:bg-white/5'}
               `}
             >
               {item.icon}
@@ -301,7 +296,7 @@ export default function AdminPage() {
                 placeholder="Search records..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal/20 outline-none w-full md:w-64"
+                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-600/20 outline-none w-full md:w-64"
               />
             </div>
             <button 
@@ -310,7 +305,7 @@ export default function AdminPage() {
                 setEditForm({});
                 setShowAddForm(!showAddForm);
               }}
-              className="px-4 py-2 bg-teal text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-teal/20 hover:scale-105 transition-transform"
+              className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-teal-600/20 hover:scale-105 transition-transform"
             >
               <Plus size={16} />
               <span>Add New</span>
@@ -341,27 +336,27 @@ export default function AdminPage() {
                 <>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Patient Name</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.patientName || ''} onChange={(e) => setEditForm({...editForm, patientName: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Email</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.email || ''} onChange={(e) => setEditForm({...editForm, email: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Doctor</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.doctor || ''} onChange={(e) => setEditForm({...editForm, doctor: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Date</label>
-                    <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.date || ''} onChange={(e) => setEditForm({...editForm, date: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Status</label>
-                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none"
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none"
                       value={editForm.status || 'pending'} onChange={(e) => setEditForm({...editForm, status: e.target.value})}>
                       <option value="pending">Pending</option>
                       <option value="confirmed">Confirmed</option>
@@ -377,12 +372,12 @@ export default function AdminPage() {
                 <>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Display Name</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.displayName || ''} onChange={(e) => setEditForm({...editForm, displayName: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Role</label>
-                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none"
+                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none"
                       value={editForm.role || 'patient'} onChange={(e) => setEditForm({...editForm, role: e.target.value})}>
                       <option value="patient">Patient</option>
                       <option value="doctor">Doctor</option>
@@ -396,36 +391,22 @@ export default function AdminPage() {
                 <>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">User UID</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.userId || ''} onChange={(e) => setEditForm({...editForm, userId: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Medication</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.medication || ''} onChange={(e) => setEditForm({...editForm, medication: e.target.value})} required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Dosage</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
+                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal-600/20 outline-none" 
                       value={editForm.dosage || ''} onChange={(e) => setEditForm({...editForm, dosage: e.target.value})} />
                   </div>
                 </>
               )}
 
-              {activeCollection === 'messages' && (
-                <>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">To/From User UID</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
-                      value={editForm.receiverId || ''} onChange={(e) => setEditForm({...editForm, receiverId: e.target.value, participants: [user?.uid, e.target.value], senderId: user?.uid})} required placeholder="Enter Patient UID to reply" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">Message Content</label>
-                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-teal/20 outline-none" 
-                      value={editForm.content || ''} onChange={(e) => setEditForm({...editForm, content: e.target.value})} required />
-                  </div>
-                </>
-              )}
 
               <div className="md:col-span-2 lg:col-span-3 flex justify-end gap-3 mt-4">
                 <button 
@@ -437,7 +418,7 @@ export default function AdminPage() {
                 </button>
                 <button 
                   type="submit"
-                  className="px-8 py-3 bg-teal text-white rounded-xl text-sm font-bold shadow-lg shadow-teal/20 hover:scale-[1.02] active:scale-95 transition-transform"
+                  className="px-8 py-3 bg-teal-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 hover:scale-[1.02] active:scale-95 transition-transform"
                 >
                   {editingId ? 'Update Record' : 'Save Record'}
                 </button>

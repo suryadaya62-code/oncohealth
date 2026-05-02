@@ -1,12 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  User, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut 
+import {
+  onAuthStateChanged,
+  User,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  signOut
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -49,6 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
+    getRedirectResult(auth).catch((error) => {
+      console.error("Redirect sign-in error:", error);
+      setAuthError("An error occurred during sign-in. Please try again.");
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
@@ -100,7 +107,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login error:", error);
-      if (error.code === 'auth/popup-closed-by-user') {
+      if (
+        error.code === 'auth/popup-blocked' ||
+        error.code === 'auth/operation-not-supported-in-this-environment' ||
+        error.code === 'auth/web-storage-unsupported'
+      ) {
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectError) {
+          console.error("Redirect fallback error:", redirectError);
+          setAuthError("An error occurred during sign-in. Please try again.");
+        }
+      } else if (error.code === 'auth/popup-closed-by-user') {
         setAuthError("The sign-in popup was closed before completion.");
       } else if (error.code === 'auth/cancelled-popup-request') {
         setAuthError("A sign-in request is already in progress.");

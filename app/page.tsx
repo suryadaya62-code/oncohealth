@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  Mail, 
-  MessageSquare, 
-  Stethoscope, 
-  Calendar as CalendarIcon, 
+import {
+  PhoneCall,
+  ShieldCheck,
+  Mail,
+  MessageSquare,
+  Stethoscope,
+  Calendar as CalendarIcon,
   User as UserIcon,
-  CreditCard,
   CheckCircle2,
   Clock,
   MapPin,
@@ -16,12 +16,10 @@ import {
   Download,
   ExternalLink,
   LogIn,
-  LogOut,
-  LayoutDashboard,
   Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
+import { QRCodeSVG } from 'qrcode.react';
 import { format, 
   addMonths, 
   subMonths, 
@@ -35,20 +33,13 @@ import { format,
   isToday 
 } from 'date-fns';
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  serverTimestamp,
-  Timestamp 
-} from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthContext';
 import PatientDashboard from '@/components/PatientDashboard';
-
 import Link from 'next/link';
 import Image from 'next/image';
 
+// OncoHealth Data Merge from GitHub
 const doctorsList = [
   {
     name: "Dr. Devmalya Banerjee",
@@ -78,52 +69,64 @@ const doctorsList = [
 
 const services = [
   {
-    icon: <Stethoscope size={20} className="text-teal" />,
+    icon: <Stethoscope size={20} className="text-teal-600" />,
     title: 'Cancer Screening',
-    description: 'Advanced imaging, lab testing, and personalized risk assessments.'
+    description: 'Advanced imaging, lab testing, and personalized risk assessments for early detection.'
   },
   {
-    icon: <CalendarIcon size={20} className="text-teal" />,
+    icon: <CalendarIcon size={20} className="text-teal-600" />,
     title: 'Treatment Planning',
-    description: 'Evidence-based oncology care and chemotherapy coordination.'
+    description: 'Evidence-based oncology care, chemotherapy coordination, and supportive services.'
   },
   {
-    icon: <ShieldCheck size={20} className="text-teal" />,
+    icon: <ShieldCheck size={20} className="text-teal-600" />,
     title: 'Patient Support',
-    description: 'Nutrition guidance, counseling, and a dedicated team.'
+    description: 'Nutrition guidance, counseling, and a dedicated team to keep you informed and strong.'
   }
 ];
 
 export default function Home() {
-  const { user, profile, login, logout, loading: authLoading } = useAuth();
+  const { user, profile, login, logout, loading: authLoading, loginLoading, authError } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [activeMode, setActiveMode] = useState<'booking' | 'portal'>('booking');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [viewDate, setViewDate] = useState<Date>(new Date(2026, 3, 28)); 
+  const [viewDate, setViewDate] = useState(new Date(2026, 3, 26)); // Use a stable initial date
   const [selectedDoctor, setSelectedDoctor] = useState(doctorsList[0]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [bookingStep, setBookingStep] = useState(1);
+  const [bookingStep, setBookingStep] = useState(1); // 1: Select, 2: Register & Pay, 3: Completed
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', notes: '' });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncStatus, setLastSyncStatus] = useState<any>(null);
 
   useEffect(() => {
-    setMounted(true);
-    setViewDate(new Date());
+    const timer = setTimeout(() => {
+      setMounted(true);
+      setViewDate(new Date()); // Set actual date on client
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (user && (!formData.email || !formData.name)) {
-      setFormData(prev => ({ 
-        ...prev, 
-        email: user.email || prev.email, 
-        name: user.displayName || prev.name 
-      }));
+    let timer: NodeJS.Timeout;
+    if (user?.email && (formData.email !== user.email || formData.name !== user.displayName)) {
+      timer = setTimeout(() => {
+        setFormData(prev => ({ 
+          ...prev, 
+          email: user.email || prev.email, 
+          name: user.displayName || prev.name 
+        }));
+      }, 0);
     }
-  }, [user]);
+    return () => {
+      if (timer) clearTimeout(timer);
+    }
+  }, [user, formData.email, formData.name]);
+
 
   const handleBookingSuccess = async () => {
+    setBookingStep(3);
     setIsSyncing(true);
+    
     const appointmentData = {
       patientName: formData.name,
       email: formData.email,
@@ -137,14 +140,21 @@ export default function Home() {
     };
 
     try {
-      await addDoc(collection(db, 'appointments'), appointmentData);
-      setBookingStep(3);
+      const path = 'appointments';
+      try {
+        await addDoc(collection(db, path), appointmentData);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+        return;
+      }
       
+      // 2. Trigger Unified Notifications
       const res = await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          patientName: formData.name,
           date: appointmentData.date,
           slot: selectedSlot,
           doctor: selectedDoctor.name
@@ -163,383 +173,772 @@ export default function Home() {
   const generateGoogleCalendarLink = () => {
     if (!selectedDate || !selectedSlot) return '#';
     const base = 'https://www.google.com/calendar/render?action=TEMPLATE';
-    const text = encodeURIComponent(`OncoHealth: ${selectedDoctor.name}`);
+    const text = encodeURIComponent(`OncoHealth Consultation with ${selectedDoctor.name}`);
+    const details = encodeURIComponent(`Confirmed oncology consultation. Doctor: ${selectedDoctor.name}. Location: Memorial Cancer Research Center.`);
+    const location = encodeURIComponent('Memorial Cancer Research Center, Suite 402');
+    
     const dateStr = format(selectedDate, 'yyyyMMdd');
-    return `${base}&text=${text}&dates=${dateStr}T143000Z/${dateStr}T153000Z`;
+    const startStr = `${dateStr}T143000Z`; 
+    const endStr = `${dateStr}T153000Z`;
+    
+    return `${base}&text=${text}&details=${details}&location=${location}&dates=${startStr}/${endStr}`;
+  };
+
+  const generateOutlookCalendarLink = () => {
+    if (!selectedDate || !selectedSlot) return '#';
+    const base = 'https://outlook.office.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent';
+    const subject = encodeURIComponent(`OncoHealth Consultation with ${selectedDoctor.name}`);
+    const body = encodeURIComponent(`Confirmed oncology consultation. Doctor: ${selectedDoctor.name}. Location: Memorial Cancer Research Center.`);
+    const location = encodeURIComponent('Memorial Cancer Research Center, Suite 402');
+    
+    const startStr = format(selectedDate, "yyyy-MM-dd'T'14:30:00");
+    const endStr = format(selectedDate, "yyyy-MM-dd'T'15:30:00");
+    
+    return `${base}&subject=${subject}&body=${body}&location=${location}&startdt=${startStr}&enddt=${endStr}`;
   };
 
   const downloadICSFile = () => {
     if (!selectedDate || !selectedSlot) return;
     const dateStr = format(selectedDate, 'yyyyMMdd');
-    const icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:Consultation with ${selectedDoctor.name}\nDTSTART:${dateStr}T143000Z\nDTEND:${dateStr}T153000Z\nEND:VEVENT\nEND:VCALENDAR`;
-    const blob = new Blob([icsContent], { type: 'text/calendar' });
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//OncoHealth//Appointment//EN
+BEGIN:VEVENT
+UID:${Date.now()}@oncohealth.app
+DTSTAMP:${format(new Date(), 'yyyyMMdd\'T\'HHmmss\'Z\'')}
+DTSTART:${dateStr}T143000Z
+DTEND:${dateStr}T153000Z
+SUMMARY:Consultation with ${selectedDoctor.name} (OncoHealth)
+DESCRIPTION:Oncology consultation at Memorial Cancer Research Center.
+LOCATION:Wing B, Suite 402, Memorial Cancer Research Center
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = 'appointment.ics';
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   const handlePrevMonth = () => setViewDate(subMonths(viewDate, 1));
   const handleNextMonth = () => setViewDate(addMonths(viewDate, 1));
-  const calendarDays = eachDayOfInterval({ 
-    start: startOfWeek(startOfMonth(viewDate)), 
-    end: endOfWeek(endOfMonth(viewDate)) 
-  });
+
+  const generateDays = () => {
+    const start = startOfWeek(startOfMonth(viewDate));
+    const end = endOfWeek(endOfMonth(viewDate));
+    return eachDayOfInterval({ start, end });
+  };
+
+  const calendarDays = generateDays();
 
   return (
-    <div className="flex flex-col min-h-screen selection:bg-teal selection:text-white">
-      {/* Premium Header */}
-      <header className="h-20 bg-white/70 backdrop-blur-3xl border-b border-slate-100 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-3 font-bold text-slate text-xl group cursor-pointer" onClick={() => { setActiveMode('booking'); setBookingStep(1); }}>
-          <div className="w-9 h-9 flex items-center justify-center border-2 border-teal rounded-xl bg-teal/5 text-teal animate-float shadow-lg shadow-teal/10">
-            <Stethoscope size={22} />
+    <div className="flex flex-col min-h-screen">
+      <AnimatePresence>
+        {authError && !user && activeMode !== 'portal' && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg text-xs font-semibold max-w-md"
+          >
+            {authError}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Header */}
+      <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-50">
+        <div className="flex items-center gap-3 font-bold text-slate-800 text-xl">
+          <div className="w-8 h-8 flex items-center justify-center border-2 border-slate-800 rounded">
+            <Stethoscope size={20} />
           </div>
-          <span className="tracking-tight uppercase font-black italic">Onco<span className="text-teal">Health</span></span>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-full">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-[8px] font-black text-green-600 uppercase tracking-widest">Open Now</span>
-          </div>
+          OncoHealth
         </div>
         
         <div className="flex items-center gap-4 lg:gap-8">
-          <nav className="hidden md:flex items-center gap-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            <button onClick={() => setActiveMode('booking')} className={`transition-all hover:text-teal ${activeMode === 'booking' ? 'text-teal border-b-2 border-teal pb-1' : ''}`}>Consultations</button>
-            <button onClick={() => setActiveMode('portal')} className={`transition-all hover:text-teal ${activeMode === 'portal' ? 'text-teal border-b-2 border-teal pb-1' : ''}`}>Patient Portal</button>
+          <nav className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-widest text-slate-500">
+            <button 
+              onClick={() => setActiveMode('booking')}
+              className={`hover:text-teal-600 transition-colors ${activeMode === 'booking' ? 'text-teal-600 border-b-2 border-teal-600 pb-1' : ''}`}
+            >
+              Consultations
+            </button>
+            <button 
+              onClick={() => setActiveMode('portal')}
+              className={`hover:text-teal-600 transition-colors ${activeMode === 'portal' ? 'text-teal-600 border-b-2 border-teal-600 pb-1' : ''}`}
+            >
+              Patient Portal
+            </button>
           </nav>
 
           <div className="flex items-center gap-3">
             {authLoading ? (
-              <div className="w-8 h-8 rounded-full border-2 border-teal border-t-transparent animate-spin" />
+              <div className="w-8 h-8 rounded-full border-2 border-teal-600 border-t-transparent animate-spin" />
             ) : user ? (
-              <div className="flex items-center gap-3 bg-slate-50 p-1 pr-3 rounded-full border border-slate-100 shadow-sm">
-                <div className="w-8 h-8 rounded-full border border-teal p-0.5 overflow-hidden relative shadow-inner">
-                  <Image src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`} alt="User" fill className="rounded-full object-cover" />
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block text-right">
+                  <p className="text-[10px] font-bold text-slate-800 truncate max-w-[100px]">{user.displayName || user.email}</p>
+                  <div className="flex items-center gap-2 justify-end">
+                    {profile?.role === 'admin' && (
+                      <Link href="/admin" className="text-[8px] font-bold text-orange-500 uppercase tracking-widest hover:underline flex items-center gap-1">
+                        <ShieldCheck size={8} /> Admin
+                      </Link>
+                    )}
+                    <button onClick={logout} className="text-[8px] font-bold text-teal-600 uppercase tracking-widest hover:underline">Sign Out</button>
+                  </div>
                 </div>
-                <div className="text-left leading-tight">
-                  <p className="text-[10px] font-bold text-slate truncate max-w-[80px]">{user.displayName || user.email}</p>
-                  <button onClick={logout} className="text-[8px] font-bold text-teal uppercase tracking-widest hover:underline block">Sign Out</button>
+                <div className="w-10 h-10 rounded-full border-2 border-teal-600 p-0.5 overflow-hidden relative">
+                  <Image 
+                    src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`} 
+                    alt="User" 
+                    fill
+                    className="rounded-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
               </div>
             ) : (
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={login} className="flex items-center gap-2 px-5 py-2 bg-slate text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-slate/20 transition-all hover:bg-slate-800">
-                <LogIn size={14} />
-                <span>Login</span>
+              <motion.button
+                whileHover={{ scale: loginLoading ? 1 : 1.05 }}
+                whileTap={{ scale: loginLoading ? 1 : 0.95 }}
+                onClick={login}
+                disabled={loginLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loginLoading ? (
+                  <>
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Signing in…</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn size={14} />
+                    <span>Patient Login</span>
+                  </>
+                )}
               </motion.button>
             )}
             
-
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => window.open('tel:+919876543210', '_self')}
+              className="bg-red-500 text-white px-5 py-2.5 rounded-md font-semibold text-sm hover:brightness-110 active:scale-95 flex items-center gap-2"
+            >
+              <PhoneCall size={14} />
+              <span className="hidden sm:inline">Emergency Assistance</span>
+              <span className="sm:hidden">Help</span>
+            </motion.button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 bg-bg p-4 lg:p-10 relative overflow-hidden">
-        {/* High-end Mesh Gradient & Blobs */}
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-teal/5 rounded-full blur-[120px] -z-10 animate-pulse" />
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-lavender/5 rounded-full blur-[100px] -z-10" />
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-teal/5 rounded-full blur-[100px] -z-10" />
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] -z-10" />
-        
+      {/* Main Content Area */}
+      <main className="flex-1 bg-slate-50 p-4 lg:p-8">
         <AnimatePresence mode="wait">
           {activeMode === 'portal' ? (
-            <motion.div key="patient-dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-7xl mx-auto h-[calc(100vh-220px)] flex flex-col">
+            <motion.div 
+              key="patient-dashboard"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-7xl mx-auto h-[calc(100vh-200px)] flex flex-col"
+            >
               {!user ? (
-                <div className="flex-1 theme-card glass-panel flex flex-col items-center justify-center text-center p-12">
-                   <div className="w-20 h-20 bg-teal/10 rounded-3xl flex items-center justify-center text-teal mb-8 shadow-inner">
-                     <Lock size={40} />
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                   <div className="w-16 h-16 bg-teal-600/10 rounded-2xl flex items-center justify-center text-teal-600 mb-6">
+                     <Lock size={32} />
                    </div>
-                   <h2 className="text-2xl font-black text-slate mb-4">Secure Access Required</h2>
-                   <p className="text-sm text-text-muted max-w-sm mb-10 leading-relaxed">Sign in to your verified patient portal to access clinical records and prescriptions.</p>
-                   <button onClick={login} className="theme-btn-primary px-10 py-4 shadow-2xl shadow-slate/30">Access Verified Portal</button>
+                   <h2 className="text-xl font-bold text-slate-800 mb-2">Secure Access Required</h2>
+                   <p className="text-sm text-slate-500 max-w-sm mb-8">Please sign in with your verified email to access prescriptions, medical history, and direct messaging with our specialists.</p>
+                   <button
+                    onClick={login}
+                    disabled={loginLoading}
+                    className="flex items-center gap-3 px-8 py-4 bg-slate-800 text-white rounded-xl font-bold shadow-xl shadow-slate/20 hover:scale-[1.02] transition-transform disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+                   >
+                     {loginLoading ? (
+                       <>
+                         <span className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                         Signing in…
+                       </>
+                     ) : (
+                       <>
+                         <LogIn size={20} />
+                         Access Verified Portal
+                       </>
+                     )}
+                   </button>
+                   {authError && (
+                     <p className="mt-4 text-xs text-red-600 max-w-sm">{authError}</p>
+                   )}
                 </div>
               ) : (
-                <div className="flex flex-col h-full">
-                  <div className="flex items-center justify-between mb-8">
+                <>
+                  <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-3xl font-black text-slate tracking-tight italic">Welcome, <span className="text-teal">{user.displayName?.split(' ')[0] || 'Patient'}</span></h1>
-                        <p className="text-xs text-text-muted mt-1 font-bold uppercase tracking-widest opacity-60">Verified Clinical Records Port</p>
+                        <h1 className="text-2xl font-bold text-slate-800">Welcome back, {user.displayName?.split(' ')[0] || 'Patient'}</h1>
+                        <p className="text-xs text-slate-500">Access your clinical documents and secure communications.</p>
                     </div>
-                    <button onClick={() => setActiveMode('booking')} className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate uppercase tracking-[0.2em] shadow-lg hover:shadow-teal/10 hover:border-teal/30 transition-all"><Plus size={16} className="text-teal" /> New Appointment</button>
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => setActiveMode('booking')}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-800 uppercase tracking-widest hover:bg-slate-50 shadow-sm"
+                       >
+                         <Plus size={14} /> New Appointment
+                       </button>
+                    </div>
                   </div>
-                  <div className="flex-1 min-h-0 shadow-2xl rounded-3xl overflow-hidden border border-white/50"><PatientDashboard /></div>
-                </div>
+                  <div className="flex-1 min-h-0">
+                    <PatientDashboard />
+                  </div>
+                </>
               )}
             </motion.div>
           ) : (
-            <motion.div key="booking-portal" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[340px_1fr_340px] gap-8">
-              
-              {/* Left Sidebar: Specialists */}
-              <motion.aside initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="theme-card glass-panel p-8">
-                <div className="section-label mb-8"><UserIcon size={14} /> Leading Specialists</div>
-                <div className="space-y-3">
-                  {doctorsList.map((doc) => (
-                    <button key={doc.name} onClick={() => { setSelectedDoctor(doc); setSelectedSlot(null); }} className={`w-full text-left p-4 rounded-2xl transition-all border-2 ${selectedDoctor.name === doc.name ? 'bg-white border-teal shadow-xl shadow-teal/5' : 'border-transparent hover:bg-white/40'}`}>
-                      <div className="flex items-center gap-4 mb-2">
-                        <div className="w-12 h-12 rounded-2xl border-2 border-slate-100 overflow-hidden relative shrink-0 shadow-sm">
-                          <Image src={doc.image} alt={doc.name} fill className="object-cover" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-black text-slate leading-none mb-1">{doc.name}</h3>
-                          <p className="text-[9px] text-teal font-black uppercase tracking-widest">{doc.role}</p>
-                        </div>
-                      </div>
+            <motion.div 
+              key="booking-portal"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[320px_1fr_340px] gap-6"
+            >
+            {/* Same Portal Content */}
+          
+          {/* Column 1: Team & Services */}
+          <motion.aside 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col shadow-sm transition-shadow duration-200 hover:shadow-md"
+          >
+            <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4 flex items-center gap-2">
+              <UserIcon size={12} /> Our Specialists
+            </div>
+            
+            <div className="space-y-6">
+              {doctorsList.map((doc, idx) => (
+                <motion.button 
+                  key={doc.name}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setSelectedDoctor(doc);
+                    setSelectedSlot(null);
+                  }}
+                  className={`w-full text-left p-4 rounded-xl transition-all border ${
+                    selectedDoctor.name === doc.name 
+                      ? 'bg-teal-600/5 border-teal-600/30 shadow-sm' 
+                      : 'border-transparent hover:bg-slate-800/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {doc.initials}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">{doc.name}</h3>
+                      <p className="text-[10px] text-teal-600 font-medium uppercase tracking-wider">{doc.role}</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed line-clamp-2">
+                    {doc.bio}
+                  </p>
+                </motion.button>
+              ))}
+            </div>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4 flex items-center gap-2">
+                <ShieldCheck size={12} /> Core Services
+              </div>
+              <div className="space-y-4">
+                {services.map((service, idx) => (
+                  <motion.div 
+                    key={service.title} 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 + idx * 0.1 }}
+                    className="flex gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-teal-600/10 flex items-center justify-center shrink-0 transition-transform hover:rotate-12">
+                      {service.icon}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">{service.title}</h4>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{service.description}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </motion.aside>
+
+          {/* Column 2: Booking System */}
+          <motion.section 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col shadow-sm transition-shadow duration-200 hover:shadow-md"
+          >
+            <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4 flex items-center gap-2">
+              <CalendarIcon size={12} /> Appointment Schedule
+            </div>
+
+            <AnimatePresence mode="wait">
+              {bookingStep === 1 ? (
+                <motion.div 
+                  key="step-selection"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="flex flex-col h-full"
+                >
+                <div className="mb-6">
+                  <h2 className="text-lg font-bold text-slate-800">Booking for {selectedDoctor.name}</h2>
+                  <p className="text-xs text-slate-500">Select your preferred date and time slot below.</p>
+                </div>
+                {/* Dynamic Calendar */}
+                <div className="flex justify-between items-center mb-6 font-semibold">
+                  <span className="capitalize">{format(viewDate, 'MMMM yyyy')}</span>
+                  <div className="flex gap-4 text-teal-600 text-sm">
+                    <button 
+                      onClick={handlePrevMonth}
+                      className="hover:opacity-60 w-8 h-8 flex items-center justify-center rounded-full hover:bg-teal-600/5 transition-colors"
+                    >
+                      ←
                     </button>
+                    <button 
+                      onClick={handleNextMonth}
+                      className="hover:opacity-60 w-8 h-8 flex items-center justify-center rounded-full hover:bg-teal-600/5 transition-colors"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 mb-8">
+                  {['S','M','T','W','T','F','S'].map((d, i) => (
+                    <div key={`weekday-${d}-${i}`} className="h-10 flex items-center justify-center text-slate-500 text-sm font-bold uppercase">{d}</div>
+                  ))}
+                  {calendarDays.map((day) => {
+                    const isCurrentMonth = isSameMonth(day, viewDate);
+                    const isSelected = selectedDate && isSameDay(day, selectedDate);
+                    const today = isToday(day);
+
+                    return (
+                      <motion.button 
+                        key={format(day, 'yyyy-MM-dd')}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setSelectedDate(day)}
+                        className={`h-10 rounded-md transition-all flex items-center justify-center text-sm relative
+                          ${!isCurrentMonth ? 'text-border grayscale opacity-40' : 'text-slate-800 font-medium'}
+                          ${isSelected ? 'bg-teal-600 text-white ring-2 ring-teal-600/20 scale-105' : 'hover:bg-teal-600/10'}
+                          ${mounted && today && !isSelected ? 'border-b-2 border-teal-600' : ''}
+                        `}
+                      >
+                        {format(day, 'd')}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+
+                <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-3 flex items-center gap-2">Available Time Slots for {selectedDoctor.name}</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
+                  {selectedDoctor.schedule.map((slot) => (
+                    <motion.button 
+                      key={slot}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`p-3 border rounded-lg text-[11px] font-bold text-center transition-all ${selectedSlot === slot ? "border-teal-600 bg-teal-600/5 text-teal-600 ring-1 ring-teal-600/30" : "bg-white text-slate-800 border-slate-200 hover:border-teal-600/50"}`}
+                    >
+                      {slot}
+                    </motion.button>
                   ))}
                 </div>
 
-                <div className="mt-10 pt-10 border-t border-slate-100">
-                  <div className="section-label mb-6"><ShieldCheck size={14} /> Core Services</div>
-                  <div className="space-y-5">
-                    {services.map((service) => (
-                      <div key={service.title} className="flex gap-4 group">
-                        <div className="w-10 h-10 rounded-xl bg-teal/5 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">{service.icon}</div>
-                        <div>
-                          <h4 className="text-xs font-black text-slate leading-none mb-1">{service.title}</h4>
-                          <p className="text-[10px] text-text-muted leading-tight opacity-70">{service.description}</p>
-                        </div>
-                      </div>
-                    ))}
+                <div className="mt-auto bg-[#F0F4F8] p-4 rounded-lg flex gap-3 items-start">
+                  <MapPin size={16} className="text-slate-800 mt-0.5 shrink-0" />
+                  <div className="text-xs text-slate-800">
+                    <p className="font-bold mb-1">Clinic Location</p>
+                    <p>Memorial Cancer Research Center, Wing B, Suite 402.</p>
                   </div>
                 </div>
-              </motion.aside>
-
-              {/* Center: Booking Core */}
-              <motion.section initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="theme-card glass-panel p-10 min-h-[700px] flex flex-col relative overflow-hidden border-teal/10 shadow-2xl">
-                {isSyncing && (
-                  <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-md flex flex-col items-center justify-center">
-                    <div className="w-12 h-12 border-4 border-teal border-t-transparent rounded-full animate-spin mb-4" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-teal animate-pulse">Syncing Secure Record...</p>
-                  </div>
+                
+                {selectedDate && selectedSlot && (
+                  <motion.button 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setBookingStep(2)}
+                    className="bg-slate-800 text-white px-4 py-4 rounded-lg font-bold text-sm transition-all hover:opacity-90 active:scale-95 flex items-center justify-center gap-2 mt-6 w-full"
+                  >
+                    Continue to Registration
+                  </motion.button>
                 )}
+              </motion.div>
+            ) : bookingStep === 2 ? (
+              <motion.div 
+                key="step-registration-payment"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex flex-col h-full"
+              >
+                <div className="mb-6">
+                  <h2 className="text-lg font-bold text-slate-800">Secure Registration & Checkout</h2>
+                  <p className="text-xs text-slate-500">Register your details and complete the secure payment to confirm.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  {/* Left: Form */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Patient Full Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter full name" 
+                        className="w-full p-4 border border-slate-200 rounded-md text-sm outline-none focus:border-teal-600 transition-colors"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">WhatsApp Number</label>
+                      <input 
+                        type="tel" 
+                        placeholder="+91 98765 43210" 
+                        className="w-full p-4 border border-slate-200 rounded-md text-sm outline-none focus:border-teal-600 transition-colors"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                      <input 
+                        type="email" 
+                        placeholder="name@company.com" 
+                        className="w-full p-4 border border-slate-200 rounded-md text-sm outline-none focus:border-teal-600 transition-colors"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Medical Notes</label>
+                      <textarea 
+                        placeholder="Brief symptoms..." 
+                        className="w-full p-4 border border-slate-200 rounded-md text-sm outline-none focus:border-teal-600 transition-colors min-h-[80px]"
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right: Payment QR */}
+                  <div className="bg-slate-800/5 p-6 rounded-2xl flex flex-col items-center justify-center text-center border border-slate-800/10 h-full">
+                    <ShieldCheck size={32} className="text-teal-600 mb-4" />
+                    <div className="flex justify-between w-full font-bold text-sm mb-4">
+                      <span className="text-slate-500 uppercase text-[8px] tracking-widest mt-1">Consultation Fee</span>
+                      <span className="text-slate-800 text-xl">₹1,500</span>
+                    </div>
+
+                    <div className="w-36 h-36 bg-white border border-slate-200 p-3 mb-2 rounded-xl flex items-center justify-center relative group shadow-sm transition-all hover:shadow-xl hover:scale-105">
+                      <QRCodeSVG 
+                        value={`upi://pay?pa=suryadaya62@pingpay&pn=Suryadaya%20Bhattacharjee&am=1500&cu=INR&tn=OncoHealth%20Consultation`}
+                        size={120}
+                        level="H"
+                        marginSize={0}
+                        imageSettings={{
+                          src: "https://ais-dev-qrj7ksec36udto7xbxfm6r-298614808685.asia-southeast1.run.app/favicon.ico",
+                          x: undefined,
+                          y: undefined,
+                          height: 24,
+                          width: 24,
+                          excavate: true,
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-white/95 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] font-bold text-slate-800 text-center p-3 rounded-xl border-2 border-teal-600">
+                        <Lock size={16} className="text-teal-600 mb-2" />
+                        <p>Encrypted UPI Gateway</p>
+                        <p className="text-[8px] text-slate-500 mt-1 underline">Scan to Pay ₹1,500</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">Suryadaya Bhattacharjee</p>
+                      <p className="text-[8px] text-slate-500 font-mono">UPI ID: suryadaya62@pingpay</p>
+                    </div>
+
+                    <p className="text-[9px] text-slate-500 mb-4 uppercase tracking-[0.2em] font-black">
+                      Secured by AES-256
+                    </p>
+
+                    <button 
+                      disabled={!formData.name || !formData.email}
+                      onClick={handleBookingSuccess}
+                      className={`w-full p-4 bg-teal-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-teal-600/20 transition-all ${!formData.name || !formData.email ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
+                    >
+                      Complete & Confirm via UPI
+                    </button>
+                    <button 
+                      onClick={() => setBookingStep(1)}
+                      className="mt-4 text-[10px] font-bold text-teal-600 uppercase tracking-widest hover:underline"
+                    >
+                      Back to Schedule
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="step-completed"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex flex-col h-full items-center justify-center text-center p-8"
+              >
+                <motion.div 
+                  initial={{ rotate: -20, scale: 0.5 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  transition={{ type: "spring", damping: 10 }}
+                  className="w-20 h-20 bg-teal-600/10 rounded-full flex items-center justify-center mb-6"
+                >
+                  <CheckCircle2 size={40} className="text-teal-600" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Booking Confirmed!</h2>
+                <p className="text-slate-500 text-sm mb-6">
+                  A real-time confirmation has been sent to <span className="text-slate-800 font-bold">{formData.email}</span>.
+                </p>
                 
-                <div className="section-label mb-8"><CalendarIcon size={14} /> Clinical Schedule</div>
-                
-                <AnimatePresence mode="wait">
-                  {bookingStep === 1 ? (
-                    <motion.div key="step-1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col h-full">
-                      <div className="mb-10">
-                        <h2 className="text-2xl font-black text-slate italic">Booking for <span className="text-teal underline decoration-teal/20 underline-offset-4">{selectedDoctor.name}</span></h2>
-                        <p className="text-xs text-text-muted font-bold uppercase tracking-widest mt-2 opacity-60">Step 1: Choose your slot</p>
-                      </div>
-
-                      <div className="flex justify-between items-center mb-6 px-2">
-                        <span className="capitalize font-black text-slate text-sm tracking-tight">{format(viewDate, 'MMMM yyyy')}</span>
-                        <div className="flex gap-3">
-                          <button onClick={handlePrevMonth} className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-50 hover:bg-teal hover:text-white transition-all shadow-sm">←</button>
-                          <button onClick={handleNextMonth} className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-50 hover:bg-teal hover:text-white transition-all shadow-sm">→</button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-7 gap-2 mb-10">
-                        {['S','M','T','W','T','F','S'].map((d, i) => (<div key={i} className="h-10 flex items-center justify-center text-slate-300 text-[10px] font-black uppercase">{d}</div>))}
-                        {calendarDays.map((day, i) => {
-                          const isCurrentMonth = isSameMonth(day, viewDate);
-                          const isSelected = selectedDate && isSameDay(day, selectedDate);
-                          return (
-                            <button key={i} onClick={() => setSelectedDate(day)} className={`h-12 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 ${!isCurrentMonth ? 'opacity-10 grayscale pointer-events-none' : ''} ${isSelected ? 'bg-teal text-white shadow-xl shadow-teal/30 scale-110' : 'hover:bg-teal/10 hover:text-teal'}`}>
-                              {format(day, 'd')}
-                              {isToday(day) && !isSelected && <div className="w-1 h-1 bg-teal rounded-full" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="section-label mb-5">Available Time Slots</div>
-                      <div className="grid grid-cols-4 gap-3 mb-8">
-                        {selectedDoctor.schedule.map((slot) => (
-                          <button 
-                            key={slot} 
-                            onClick={() => setSelectedSlot(slot)} 
-                            className={`py-4 rounded-xl text-[10px] font-black transition-all border-2 uppercase tracking-widest flex items-center justify-center gap-2 ${selectedSlot === slot ? 'bg-teal border-teal text-white shadow-xl shadow-teal/20 scale-105' : 'bg-white/50 border-slate-100 hover:border-teal/30 text-slate-500'}`}
-                          >
-                            {selectedSlot === slot && <CheckCircle2 size={10} />}
-                            {slot}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="mt-auto bg-slate-50/50 backdrop-blur-sm p-4 rounded-2xl border border-slate-100 flex gap-4 items-start mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-100">
-                          <MapPin size={20} className="text-teal" />
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-black text-slate uppercase tracking-widest mb-1">Memorial Research Center</h4>
-                          <p className="text-[10px] text-text-muted leading-relaxed opacity-70">Wing B, Suite 402. Memorial Cancer Research Center, Sector V, Salt Lake.</p>
-                        </div>
-                      </div>
-
-                      {selectedDate && selectedSlot && (
-                        <button onClick={() => setBookingStep(2)} className="theme-btn-primary py-5 shadow-2xl shadow-slate/20 mt-auto flex items-center justify-center gap-3">
-                          Continue to Registration <Plus size={16} />
-                        </button>
-                      )}
-                    </motion.div>
-                  ) : bookingStep === 2 ? (
-                    <motion.div key="step-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col h-full">
-                      <div className="grid md:grid-cols-[1fr_260px] gap-10 h-full">
-                        <div className="space-y-6">
-                          <div className="section-label">Patient Verification</div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate/40 uppercase tracking-[0.2em] ml-1">Full Name</label>
-                            <input type="text" placeholder="Patient Name" className="theme-input py-5 px-6 bg-white/50" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate/40 uppercase tracking-[0.2em] ml-1">WhatsApp Port</label>
-                            <input type="tel" placeholder="+91" className="theme-input py-5 px-6 bg-white/50" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate/40 uppercase tracking-[0.2em] ml-1">Secure Email</label>
-                            <input type="email" placeholder="name@domain.com" className="theme-input py-5 px-6 bg-white/50" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate/40 uppercase tracking-[0.2em] ml-1">Clinical Notes</label>
-                            <textarea placeholder="Briefly describe symptoms..." className="theme-input py-5 px-6 bg-white/50 min-h-[120px]" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />
-                          </div>
-                        </div>
-
-                        <div className="bg-white/90 p-8 rounded-[2rem] border border-slate-100 flex flex-col items-center relative overflow-hidden h-full shadow-2xl">
-                          <div className="absolute inset-0 bg-teal/[0.02] animate-pulse pointer-events-none" />
-                          <div className="section-label mb-8">Checkout Guard</div>
-                          <div className="w-full flex justify-between mb-8 font-black text-xs tracking-tighter">
-                            <span className="text-slate/40 uppercase tracking-widest text-[9px] mt-1">Consultation</span>
-                            <span className="text-slate text-2xl italic">₹1,500</span>
-                          </div>
-                          <div className="relative group mb-10">
-                            <div className="absolute -inset-8 bg-teal/10 rounded-full blur-[40px] opacity-0 group-hover:opacity-100 transition-opacity animate-pulse" />
-                            <div className="w-40 h-56 bg-white border border-slate-100 p-2 rounded-2xl flex items-center justify-center relative shadow-xl transition-all hover:scale-105 hover:rotate-1">
-                              <Image src="/samsung-qr.jpg" alt="UPI QR" fill className="object-contain p-2 rounded-xl" />
-                            </div>
-                            <div className="absolute -bottom-2 -right-2 bg-teal text-white p-1.5 rounded-lg shadow-lg rotate-12">
-                              <Lock size={12} />
-                            </div>
-                          </div>
-                          <p className="text-[9px] font-black text-slate/40 uppercase tracking-[0.3em] mb-10">Scan to Verify Payment</p>
-                          <button onClick={handleBookingSuccess} className="mt-auto theme-btn-primary w-full py-5 shadow-2xl shadow-teal/20 group relative overflow-hidden">
-                            <span className="relative z-10">Confirm via UPI</span>
-                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12" />
-                          </button>
-                          <button onClick={() => setBookingStep(1)} className="mt-4 text-[9px] font-black text-slate/30 uppercase tracking-widest hover:text-teal transition-colors">Back to Schedule</button>
-                        </div>
-                      </div>
-                    </motion.div>
+                <div className="w-full space-y-3 mb-6">
+                  {isSyncing ? (
+                    <div className="text-center py-2 text-[10px] font-bold text-teal-600 animate-pulse uppercase tracking-widest">
+                      🔄 Syncing Secure Record...
+                    </div>
                   ) : (
-                    <motion.div key="step-3" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col h-full items-center justify-center text-center p-10">
-                      <div className="relative mb-8">
-                        <div className="w-24 h-24 bg-teal/5 rounded-[2.5rem] flex items-center justify-center shadow-inner animate-float">
-                          <CheckCircle2 size={48} className="text-teal" />
-                        </div>
-                        <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl border-4 border-white overflow-hidden shadow-xl">
-                          <Image src={selectedDoctor.image} alt={selectedDoctor.name} fill className="object-cover" />
-                        </div>
-                      </div>
-                      <h2 className="text-4xl font-black text-slate italic tracking-tighter mb-4">Confirmed!</h2>
-                      <p className="text-text-muted text-sm font-bold max-w-sm mb-12 leading-relaxed">Your oncology consultation record has been encrypted and synced with <span className="text-teal underline underline-offset-4 decoration-2">{formData.email}</span>.</p>
-                      
-                      <div className="w-full max-w-md space-y-4 mb-12">
-                        <div className="flex items-center gap-4 p-5 rounded-2xl bg-teal/5 border border-teal/10 group hover:bg-teal/10 transition-colors">
-                          <Mail size={20} className="text-teal" />
-                          <div className="text-left">
-                            <p className="text-xs font-black text-slate">Email Record Delivered</p>
-                            <p className="text-[9px] text-text-muted uppercase tracking-widest font-bold">Resend Verified</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 p-5 rounded-2xl bg-teal/5 border border-teal/10">
-                          <ShieldCheck size={20} className="text-teal" />
-                          <div className="text-left">
-                            <p className="text-xs font-black text-slate">AES-256 Database Sync</p>
-                            <p className="text-[9px] text-text-muted uppercase tracking-widest font-bold">Firestore Immutable</p>
-                          </div>
-                        </div>
-                      </div>
+                    <>
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        lastSyncStatus?.email?.status === 'error' 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-teal-600/5 border-teal-600/20'
+                        }`}
+                      >
+                        <Mail size={16} className={lastSyncStatus?.email?.status === 'error' ? 'text-red-500' : 'text-teal-600'} />
+                        <span className={`text-xs font-semibold ${lastSyncStatus?.email?.status === 'error' ? 'text-red-700' : 'text-slate-800'}`}>
+                          {lastSyncStatus?.email?.status === 'error' 
+                            ? `Email Alert: ${lastSyncStatus.email.message}` 
+                            : lastSyncStatus?.email?.status === 'success' 
+                              ? 'Confirmation Email Delivered' 
+                              : 'Secure Database Record Saved'}
+                        </span>
+                      </motion.div>
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors bg-teal-600/5 border-teal-600/20`}
+                      >
+                        <CheckCircle2 size={16} className="text-teal-600" />
+                        <span className="text-xs font-semibold text-slate-800">
+                          Encrypted Database Log Created
+                        </span>
+                      </motion.div>
 
-                      <div className="w-full max-w-md grid grid-cols-2 gap-4 mb-4">
-                        <a href={generateGoogleCalendarLink()} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 p-4 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"><ExternalLink size={14} className="text-teal" /> Google</a>
-                        <button onClick={downloadICSFile} className="flex items-center justify-center gap-3 p-4 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"><Download size={14} className="text-teal" /> Apple/ICS</button>
-                      </div>
-                      <button onClick={() => { setBookingStep(1); setSelectedSlot(null); setSelectedDate(null); }} className="theme-btn-primary w-full max-w-md py-5 shadow-2xl shadow-slate/20">Book Another Specialist</button>
-                    </motion.div>
+                      {formData.phone && (
+                        <motion.div 
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 }}
+                          className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          lastSyncStatus?.sms?.status === 'error' 
+                            ? 'bg-red-50 border-red-200' 
+                            : 'bg-teal-600/5 border-teal-600/20'
+                          }`}
+                        >
+                          <MessageSquare size={16} className={lastSyncStatus?.sms?.status === 'error' ? 'text-red-500' : 'text-teal-600'} />
+                          <span className={`text-xs font-semibold ${lastSyncStatus?.sms?.status === 'error' ? 'text-red-700' : 'text-slate-800'}`}>
+                            {lastSyncStatus?.sms?.status === 'error' 
+                              ? `WhatsApp Alert: ${lastSyncStatus.sms.message}` 
+                              : lastSyncStatus?.sms?.status === 'success' 
+                                ? 'WhatsApp Confirmation Sent' 
+                                : 'WhatsApp setup (Optional)'}
+                          </span>
+                        </motion.div>
+                      )}
+                    </>
                   )}
-                </AnimatePresence>
-                
-                {/* Fixed bottom FAQ for trust */}
-                <div className="mt-auto pt-10 border-t border-slate-100 px-2">
-                  <div className="section-label mb-6"><Clock size={14} /> Knowledge Port</div>
-                  <div className="grid grid-cols-2 gap-8">
-                    <div>
-                      <h4 className="text-[11px] font-black text-slate uppercase tracking-tight mb-2">First Visit?</h4>
-                      <p className="text-[10px] text-text-muted leading-relaxed opacity-70">Arrive 15m early with imaging discs and pathology history.</p>
-                    </div>
-                    <div>
-                      <h4 className="text-[11px] font-black text-slate uppercase tracking-tight mb-2">Data Policy</h4>
-                      <p className="text-[10px] text-text-muted leading-relaxed opacity-70">HIPAA compliant AES-256 encryption across all ports.</p>
-                    </div>
-                  </div>
-                </div>
-              </motion.section>
-
-              {/* Right Sidebar: Security Stats */}
-              <motion.aside initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="theme-card glass-panel p-8 flex flex-col">
-                <div className="section-label mb-8"><ShieldCheck size={14} /> Trust Architecture</div>
-                <div className="space-y-8">
-                  <div className="flex gap-5 items-start group">
-                    <div className="w-12 h-12 rounded-[1.2rem] bg-teal/5 flex items-center justify-center shrink-0 shadow-inner group-hover:rotate-6 transition-transform"><Lock size={24} className="text-teal" /></div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate mb-1">E2E Encryption</h4>
-                      <p className="text-[10px] text-text-muted leading-relaxed opacity-70">Clinical records are accessible only to your selected consultant.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-5 items-start group">
-                    <div className="w-12 h-12 rounded-[1.2rem] bg-teal/5 flex items-center justify-center shrink-0 shadow-inner group-hover:rotate-6 transition-transform"><ShieldCheck size={24} className="text-teal" /></div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate mb-1">Enterprise Guard</h4>
-                      <p className="text-[10px] text-text-muted leading-relaxed opacity-70">Stored using Firebase Enterprise compliance with zero downtime.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-5 items-start group">
-                    <div className="w-12 h-12 rounded-[1.2rem] bg-teal/5 flex items-center justify-center shrink-0 shadow-inner group-hover:rotate-6 transition-transform"><Clock size={24} className="text-teal" /></div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate mb-1">Sub-100ms Sync</h4>
-                      <p className="text-[10px] text-text-muted leading-relaxed opacity-70">Instant scheduling across all clinic dashboards and medical ports.</p>
-                    </div>
-                  </div>
                 </div>
 
-                <div className="mt-10 pt-10 border-t border-slate-100 flex flex-col items-center">
-                  <div className="grid grid-cols-2 gap-4 w-full mb-10">
-                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 text-center">
-                      <p className="text-xl font-black text-slate tracking-tighter">15k+</p>
-                      <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.2em] mt-1">Patients</p>
-                    </div>
-                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 text-center">
-                      <p className="text-xl font-black text-teal tracking-tighter">98%</p>
-                      <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.2em] mt-1">Success</p>
-                    </div>
-                  </div>
-                   <div className="relative w-32 h-32 mb-6">
-                    <div className="absolute inset-0 bg-teal/10 rounded-full animate-ping opacity-20" />
-                    <div className="absolute inset-4 bg-teal/10 rounded-full animate-pulse opacity-40" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <ShieldCheck size={40} className="text-teal/40 animate-float" />
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] font-black text-slate uppercase tracking-[0.3em] mb-1">Verified Port</p>
-                    <p className="text-[9px] text-text-muted font-bold">Active Shield: AES-256</p>
-                  </div>
+                <div className="w-full grid grid-cols-2 gap-3 mb-3">
+                  <a 
+                    href={generateGoogleCalendarLink()} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 p-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 hover:bg-slate-800/5 transition-colors"
+                  >
+                    <ExternalLink size={14} className="text-teal-600" />
+                    Google
+                  </a>
+                  <a 
+                    href={generateOutlookCalendarLink()} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 p-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 hover:bg-slate-800/5 transition-colors"
+                  >
+                    <ExternalLink size={14} className="text-teal-600" />
+                    Outlook
+                  </a>
                 </div>
-              </motion.aside>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
+                <button 
+                  onClick={downloadICSFile}
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 hover:bg-slate-800/5 transition-colors mb-8"
+                >
+                  <Download size={14} className="text-teal-600" />
+                  Download Invite (ICS)
+                </button>
 
-      <footer className="h-16 bg-white border-t border-slate-100 flex items-center justify-center gap-10 text-[9px] font-black text-slate/30 uppercase tracking-[0.2em] px-6 overflow-x-auto whitespace-nowrap">
-        <div className="flex items-center gap-2"><ShieldCheck size={14} className="text-teal/40" /> HIPAA Compliant</div>
-        <div className="flex items-center gap-2"><Lock size={14} className="text-teal/40" /> AES-256 Encryption</div>
-        <div className="flex items-center gap-2"><Clock size={14} className="text-teal/40" /> Real-time Sync</div>
-        <div className="flex items-center gap-2"><CheckCircle2 size={14} className="text-teal/40" /> Verified Portal</div>
+                <button 
+                  onClick={() => {
+                    setBookingStep(1);
+                    setSelectedSlot(null);
+                    setSelectedDate(null);
+                  }}
+                  className="bg-slate-800 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all hover:opacity-90 active:scale-95 flex items-center justify-center gap-2 w-full"
+                >
+                  Book Another Appointment
+                </button>
+              </motion.div>
+            )}
+            </AnimatePresence>
+
+            {/* FAQ Section */}
+            <div className="mt-12 border-t border-slate-200 pt-10">
+              <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4 flex items-center gap-2">
+                <Clock size={12} /> Frequently Asked Questions
+              </div>
+              <div className="space-y-6">
+                <div className="group">
+                  <h4 className="text-sm font-bold text-slate-800 mb-2">How do I prepare for my first consultation?</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">Please bring all recent pathology reports, imaging (CT/MRI) on a disc, and a list of current medications. Arrive 15 minutes early for registration.</p>
+                </div>
+                <div className="group">
+                  <h4 className="text-sm font-bold text-slate-800 mb-2">Are video consultations as effective?</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">Video calls are excellent for follow-ups, report reviews, and initial discussions. Physical exams still require in-clinic visits.</p>
+                </div>
+                <div className="group">
+                  <h4 className="text-sm font-bold text-slate-800 mb-2">Is my data secure?</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">Yes, we are HIPAA compliant. All data is encrypted with AES-256 standards, and we use secure Firebase infrastructure.</p>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/* Column 3: Trusted Security */}
+          <motion.aside 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col shadow-sm transition-shadow duration-200 hover:shadow-md"
+          >
+            <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-4 flex items-center gap-2">
+              <ShieldCheck size={12} /> Verification Guard
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex gap-4 items-start">
+                <div className="w-10 h-10 rounded-xl bg-teal-600/10 flex items-center justify-center shrink-0">
+                  <Lock size={20} className="text-teal-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Secure Transmission</h4>
+                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                    End-to-end medical encryption ensures your clinical data is accessible only to your selected consultant.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-4 items-start">
+                <div className="w-10 h-10 rounded-xl bg-teal-600/10 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={20} className="text-teal-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">HIPAA Standards</h4>
+                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                    All patient records are stored using Firebase&apos;s enterprise compliance layer and monitored for unauthorized access.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-4 items-start">
+                <div className="w-10 h-10 rounded-xl bg-teal-600/10 flex items-center justify-center shrink-0">
+                  <Clock size={20} className="text-teal-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Instant Sync</h4>
+                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                    Once payment is verified, your slot is instantly locked across all clinical dashboards and syncing devices.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-800 uppercase tracking-widest mb-4">
+                  <span>Selected Schedule</span>
+                  <span className="text-teal-600">{selectedSlot || 'Select Slot'}</span>
+                </div>
+                <div className="p-4 bg-slate-800/5 rounded-xl border border-dashed border-slate-800/20">
+                   <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                    &quot;OncoHealth utilizes real-time Firestore architecture to ensure sub-100ms sync across medical devices.&quot;
+                   </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-6 flex gap-2 items-center">
+              <div className={`w-2 h-2 rounded-full transition-colors ${bookingStep >= 1 ? 'bg-teal-600' : 'bg-slate-200'}`} />
+              <div className={`w-2 h-2 rounded-full transition-colors ${bookingStep >= 2 ? 'bg-teal-600' : 'bg-slate-200'}`} />
+              <div className={`w-2 h-2 rounded-full transition-colors ${bookingStep >= 3 ? 'bg-teal-600' : 'bg-slate-200'}`} />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                {bookingStep === 1 ? 'Step 1 of 3' : bookingStep === 2 ? 'Step 2 of 3' : 'Completed'}
+              </span>
+            </div>
+          </motion.aside>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </main>
+
+      {/* Security Footer */}
+      <footer className="h-12 bg-white border-t border-slate-200 flex items-center justify-center gap-4 lg:gap-10 text-[10px] lg:text-[11px] font-bold text-slate-500 uppercase tracking-wider overflow-x-auto whitespace-nowrap px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={12} className="text-teal-600" /> 
+          HIPAA Compliant
+        </div>
+        <div className="flex items-center gap-2">
+          <Lock size={12} className="text-teal-600" /> 
+          AES-256 Encryption
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          <Clock size={12} className="text-teal-600" /> 
+          Real-time Sync
+        </div>
+        <div className="flex items-center gap-2">
+          <CheckCircle2 size={12} className="text-teal-600" /> 
+          Verified Patient Port
+        </div>
       </footer>
-
-
     </div>
   );
 }

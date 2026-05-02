@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   // Allow access to remote image placeholder.
   images: {
@@ -34,8 +34,7 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  // output: 'standalone' is removed — incompatible with @netlify/plugin-nextjs
-  // The Netlify plugin handles server-side rendering natively.
+  output: 'standalone',
   // Removed transpilePackages for motion as next 15+ handles it better
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.

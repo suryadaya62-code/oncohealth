@@ -1,21 +1,23 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/components/AuthContext';
 
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+
 export const metadata: Metadata = {
-  title: 'OncoHealth - Secure Patient Portal',
-  description: 'Advanced oncology care booking and patient management platform.',
+  title: 'Oncology Clinic',
+  description: 'Compassionate cancer care designed for your recovery.',
+};
+
+export const viewport = {
+  themeColor: '#dce8f5',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      </head>
-      <body suppressHydrationWarning>
+      <body className={inter.variable} suppressHydrationWarning>
         <AuthProvider>
           {children}
         </AuthProvider>
